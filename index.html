@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Coffee Tracker (Username Only - Insecure)</title>
+
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    .card {
+      background: rgba(255,255,255,0.95);
+      border-radius: 18px;
+      padding: 26px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      backdrop-filter: blur(10px);
+      position: relative;
+    }
+    h1 { margin: 0 0 8px 0; color: #2d3748; text-align: center; font-size: 2.3em; }
+    h2 { margin: 0 0 12px 0; color: #2d3748; }
+    .subtitle { text-align: center; color: #718096; margin-bottom: 18px; }
+    .hidden { display: none !important; }
+
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    input:focus { outline: none; border-color: #667eea; }
+
+    button {
+      width: 100%;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
+      margin-top: 10px;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
+
+    .btn-primary { background: #667eea; color: #fff; }
+    .btn-secondary { background: #48bb78; color: #fff; }
+    .btn-danger { background: #f56565; color: #fff; width: auto; padding: 8px 14px; font-size: 14px; }
+
+    .msg { margin-top: 10px; font-size: 14px; }
+    .msg.error { color: #c53030; }
+    .msg.ok { color: #2f855a; }
+    .muted { color: #718096; font-size: 14px; }
+
+    .logout { position: absolute; top: 16px; right: 16px; }
+
+    .coffee-counter { text-align: center; margin-top: 18px; }
+    .count { font-size: 3.6em; font-weight: 800; color: #667eea; margin: 8px 0; }
+    .coffee-btn { background: #48bb78; color: #fff; font-size: 1.15em; padding: 14px; }
+
+    .history-item {
+      display:flex; justify-content:space-between;
+      padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
+    }
+
+    .leaderboard-item {
+      display:flex; justify-content:space-between;
+      padding: 10px 12px; background:#f7fafc; margin-bottom: 8px; border-radius: 10px;
+    }
+    .leaderboard-item.me { background: #667eea; color: #fff; }
+
+    .tabs { display:flex; gap:10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 10px; border-radius: 10px; background:#e2e8f0; cursor:pointer; user-select:none;
+      flex: 1 1 110px; text-align:center;
+    }
+    .tab.active { background:#667eea; color:#fff; }
+
+    pre {
+      background:#f7fafc; padding: 12px; border-radius: 10px; overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#667eea">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+</head>
+
+<body>
+  <div class="container">
+
+    <!-- SETUP -->
+    <div id="setup" class="card hidden">
+      <h1>☕ Coffee Tracker</h1>
+      <p class="subtitle">Supabase setup</p>
+
+      <p class="muted">
+        This version is intentionally <strong>insecure</strong>: “login” is just a username. Anyone who knows a username can read/write that username’s coffees.
+        Use only with people you trust.
+      </p>
+
+      <h2 style="margin-top:16px;">SQL (run once)</h2>
+      <pre id="sqlBlock"></pre>
+
+      <input id="supabaseUrl" placeholder="Project URL (https://xxxx.supabase.co)"/>
+      <input id="supabaseAnonKey" placeholder="Anon public key"/>
+
+      <button class="btn-primary" onclick="saveConfig()">Save & Continue</button>
+      <div id="setupMsg" class="msg"></div>
+    </div>
+
+    <!-- "LOGIN" -->
+    <div id="login" class="card hidden">
+      <h1>☕ Coffee Tracker</h1>
+      <p class="subtitle">Username-only (no password)</p>
+
+      <h2>Enter username</h2>
+      <p class="muted">
+        This username will be used as the key for all your coffee data across devices.
+      </p>
+      <input id="username" placeholder="Username (3–24 chars, letters/numbers/_ only)"/>
+      <button class="btn-primary" onclick="doLogin()">Continue</button>
+      <div id="loginMsg" class="msg"></div>
+    </div>
+
+    <!-- APP -->
+    <div id="app" class="hidden">
+      <div class="card">
+        <button class="btn-danger logout" onclick="logout()">Log out</button>
+
+        <h1>☕ Coffee Tracker</h1>
+        <p class="subtitle">User: <span id="displayUsername"></span></p>
+
+        <div class="coffee-counter">
+          <div class="muted">Coffees today</div>
+          <div class="count" id="todayCount">0</div>
+          <button class="coffee-btn" onclick="addCoffee()">+ Add Coffee</button>
+        </div>
+
+        <h2 style="margin-top:22px;">Recent coffees</h2>
+        <div id="history"></div>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Leaderboard</h2>
+        <div class="tabs">
+          <div class="tab active" data-view="today" onclick="switchLeaderboard(event)">Today</div>
+          <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
+          <div class="tab" data-view="month" onclick="switchLeaderboard(event)">This Month</div>
+          <div class="tab" data-view="all" onclick="switchLeaderboard(event)">All Time</div>
+        </div>
+        <div id="leaderboard"></div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  // Use a different variable name than "supabase" to avoid conflicts with the global library.
+  let supabaseClient = null;
+
+  let currentUsername = null;
+  let currentLeaderboardView = "today";
+
+  const SQL = `
+-- Insecure username-only coffee tracker
+-- This stores coffees by username text, with open read/write policies.
+
+create table if not exists public.coffees_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+
+create index if not exists coffees_by_username_user_ts_idx
+  on public.coffees_by_username (username, timestamp desc);
+
+alter table public.coffees_by_username enable row level security;
+
+-- Open policies (INSECURE): anyone can read/insert/delete/update.
+create policy if not exists "read all coffees"
+  on public.coffees_by_username for select
+  using (true);
+
+create policy if not exists "insert coffees"
+  on public.coffees_by_username for insert
+  with check (true);
+
+create policy if not exists "update coffees"
+  on public.coffees_by_username for update
+  using (true)
+  with check (true);
+
+create policy if not exists "delete coffees"
+  on public.coffees_by_username for delete
+  using (true);
+
+-- Optional: leaderboard function (aggregates by username)
+create or replace function public.leaderboard_username_since(ts timestamptz)
+returns table (username text, coffees int)
+language sql
+security definer
+as $$
+  select c.username, count(*)::int as coffees
+  from public.coffees_by_username c
+  where c.timestamp >= ts
+  group by c.username
+  order by coffees desc;
+$$;
+
+grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;
+`.trim();
+
+  document.getElementById("sqlBlock").textContent = SQL;
+
+  window.onload = async () => {
+    if (typeof window.supabase === "undefined") {
+      alert("Supabase library failed to load. Check your internet connection.");
+      return;
+    }
+
+    const cfg = localStorage.getItem("sb_cfg");
+    if (!cfg) return show("setup");
+
+    const { url, anonKey } = JSON.parse(cfg);
+    supabaseClient = window.supabase.createClient(url, anonKey);
+
+    const savedUser = localStorage.getItem("coffee_username");
+    if (savedUser) {
+      currentUsername = savedUser;
+      showApp();
+    } else {
+      show("login");
+    }
+  };
+
+  function show(which) {
+    ["setup","login"].forEach(id => document.getElementById(id).classList.add("hidden"));
+    document.getElementById("app").classList.add("hidden");
+
+    if (which === "app") document.getElementById("app").classList.remove("hidden");
+    else document.getElementById(which).classList.remove("hidden");
+  }
+
+  function setMsg(id, text, isError=false) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = "msg " + (isError ? "error" : "ok");
+  }
+
+  async function saveConfig() {
+    const url = document.getElementById("supabaseUrl").value.trim();
+    const anonKey = document.getElementById("supabaseAnonKey").value.trim();
+    if (!url || !anonKey) return setMsg("setupMsg", "Please enter both URL and anon key.", true);
+
+    localStorage.setItem("sb_cfg", JSON.stringify({ url, anonKey }));
+    supabaseClient = window.supabase.createClient(url, anonKey);
+
+    show("login");
+  }
+
+  function validUsername(u) {
+    return /^[A-Za-z0-9_]{3,24}$/.test(u);
+  }
+
+  function doLogin() {
+    const u = document.getElementById("username").value.trim();
+    if (!validUsername(u)) return setMsg("loginMsg", "Invalid username (3–24 chars, letters/numbers/_ only).", true);
+
+    currentUsername = u;
+    localStorage.setItem("coffee_username", u);
+    showApp();
+  }
+
+  function logout() {
+    localStorage.removeItem("coffee_username");
+    currentUsername = null;
+    show("login");
+  }
+
+  function showApp() {
+    document.getElementById("displayUsername").textContent = currentUsername;
+    show("app");
+    loadData();
+  }
+
+  async function addCoffee() {
+    const { error } = await supabaseClient
+      .from("coffees_by_username")
+      .insert([{ username: currentUsername }]);
+
+    if (error) {
+      console.error("addCoffee:", error);
+      alert("Could not add coffee. Check console.");
+      return;
+    }
+    await loadData();
+  }
+
+  async function loadData() {
+    // Today count + history for this username
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const { data, error } = await supabaseClient
+      .from("coffees_by_username")
+      .select("timestamp")
+      .eq("username", currentUsername)
+      .gte("timestamp", today.toISOString())
+      .order("timestamp", { ascending: false });
+
+    if (error) return console.error("loadData:", error);
+
+    document.getElementById("todayCount").textContent = (data || []).length;
+
+    const history = (data || []).slice(0, 10).map(r => {
+      const t = new Date(r.timestamp).toLocaleTimeString();
+      return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
+    }).join("");
+
+    document.getElementById("history").innerHTML =
+      history || `<p class="muted" style="text-align:center; margin-top:10px;">No coffees yet today.</p>`;
+
+    await loadLeaderboard();
+  }
+
+  function switchLeaderboard(evt) {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    evt.target.classList.add("active");
+    currentLeaderboardView = evt.target.getAttribute("data-view");
+    loadLeaderboard();
+  }
+
+  async function loadLeaderboard() {
+    let startDate = new Date();
+    switch (currentLeaderboardView) {
+      case "today":
+        startDate.setHours(0,0,0,0);
+        break;
+      case "week":
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case "month":
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case "all":
+        startDate = new Date("2000-01-01");
+        break;
+    }
+
+    // Use RPC (fast) if available; otherwise fallback to client aggregation.
+    let rows = null;
+
+    try {
+      const { data, error } = await supabaseClient.rpc("leaderboard_username_since", { ts: startDate.toISOString() });
+      if (!error) rows = data;
+    } catch (_) {}
+
+    if (!rows) {
+      // Fallback: query coffees and aggregate in JS (can be slower)
+      const { data, error } = await supabaseClient
+        .from("coffees_by_username")
+        .select("username")
+        .gte("timestamp", startDate.toISOString());
+
+      if (error) {
+        console.error("leaderboard fallback:", error);
+        document.getElementById("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load leaderboard.</p>`;
+        return;
+      }
+
+      const counts = {};
+      (data || []).forEach(r => counts[r.username] = (counts[r.username] || 0) + 1);
+      rows = Object.entries(counts).map(([username, coffees]) => ({ username, coffees }))
+        .sort((a,b) => b.coffees - a.coffees);
+    }
+
+    const html = (rows || []).slice(0, 10).map((row, idx) => {
+      const isMe = row.username === currentUsername;
+      return `<div class="leaderboard-item ${isMe ? "me" : ""}">
+        <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""}</span>
+        <span>${row.coffees} ☕</span>
+      </div>`;
+    }).join("");
+
+    document.getElementById("leaderboard").innerHTML =
+      html || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
+  }
+</script>
+
+<script>
+  // PWA: register service worker (required for installability + future offline caching)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(console.error);
+    });
+  }
+</script>
+
+</body>
+</html>
