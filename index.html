@@ -103,8 +103,29 @@
 <body>
   <div class="container">
 
+    <!-- SETUP -->
+    
+        <!-- SETUP (admin only: add ?admin=1 to URL) -->
+        <div id="setup" class="card hidden">
+            <h1>☕ Coffee Tracker</h1>
+            <p class="subtitle">Admin setup (hidden)</p>
+            <p class="muted">
+              This page is only shown when you open the app with <code>?admin=1</code>.
+              Share the normal URL with friends (no setup text will appear).
+            </p>
+
+            <h2 style="margin-top:16px;">SQL (run once)</h2>
+            <p class="muted">Run this in Supabase SQL Editor to create the table and open policies for the username-only version.</p>
+            <pre id="sqlBlock"></pre>
+
+            <button class="btn-secondary" onclick="copySQL()">Copy SQL</button>
+            <button class="btn-primary" onclick="goToApp()">Go to app</button>
+            <p id="setupMsg" class="msg"></p>
+        </div>
+</div>
+
     <!-- "LOGIN" -->
-    <div id="login" class="card hidden">
+    <div id="login" class="card">
       <h1>☕ Coffee Tracker</h1>
       <p class="subtitle">Username-only (no password)</p>
 
@@ -154,25 +175,150 @@
   let supabaseClient = null;
 
   // Hardcoded Supabase configuration (shared for all users)
-  // TODO: Replace these with your project values
-  const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
-  const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+  // TODO: Replace these with your project values, then redeploy.
+  const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
+
+  const SETUP_SQL = `-- Insecure username-only coffee tracker
+-- This stores coffees by username text, with open read/write policies.
+
+create table if not exists public.coffees_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+
+create index if not exists coffees_by_username_user_ts_idx
+  on public.coffees_by_username (username, timestamp desc);
+
+alter table public.coffees_by_username enable row level security;
+
+-- Open policies (INSECURE): anyone can read/insert/delete/update.
+create policy if not exists "read all coffees"
+  on public.coffees_by_username for select
+  using (true);
+
+create policy if not exists "insert coffees"
+  on public.coffees_by_username for insert
+  with check (true);
+
+create policy if not exists "update coffees"
+  on public.coffees_by_username for update
+  using (true)
+  with check (true);
+
+create policy if not exists "delete coffees"
+  on public.coffees_by_username for delete
+  using (true);
+
+-- Optional: leaderboard function (aggregates by username)
+create or replace function public.leaderboard_username_since(ts timestamptz)
+returns table (username text, coffees int)
+language sql
+security definer
+as $$
+  select c.username, count(*)::int as coffees
+  from public.coffees_by_username c
+  where c.timestamp >= ts
+  group by c.username
+  order by coffees desc;
+$$;
+
+grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;`.trim();
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function showSetupAdmin() {
+    // Hide app + login, show setup
+    ["login"].forEach(id => el(id)?.classList.add("hidden"));
+    el("app")?.classList.add("hidden");
+    el("setup")?.classList.remove("hidden");
+    const pre = el("sqlBlock");
+    if (pre) pre.textContent = SETUP_SQL;
+  }
+
+  async function copySQL() {
+    try {
+      await navigator.clipboard.writeText(SETUP_SQL);
+      setMsg("setupMsg", "SQL copied to clipboard.", false);
+    } catch {
+      setMsg("setupMsg", "Could not copy automatically. Select the SQL and copy manually.", true);
+    }
+  }
+
+  function goToApp() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("admin");
+    window.location.href = url.toString();
+  }
 
 let currentUsername = null;
-  let currentLeaderboardView = "today";window.onload = async () => {
+  let currentLeaderboardView = "today";
+
+  const SQL = `
+-- Insecure username-only coffee tracker
+-- This stores coffees by username text, with open read/write policies.
+
+create table if not exists public.coffees_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+
+create index if not exists coffees_by_username_user_ts_idx
+  on public.coffees_by_username (username, timestamp desc);
+
+alter table public.coffees_by_username enable row level security;
+
+-- Open policies (INSECURE): anyone can read/insert/delete/update.
+create policy if not exists "read all coffees"
+  on public.coffees_by_username for select
+  using (true);
+
+create policy if not exists "insert coffees"
+  on public.coffees_by_username for insert
+  with check (true);
+
+create policy if not exists "update coffees"
+  on public.coffees_by_username for update
+  using (true)
+  with check (true);
+
+create policy if not exists "delete coffees"
+  on public.coffees_by_username for delete
+  using (true);
+
+-- Optional: leaderboard function (aggregates by username)
+create or replace function public.leaderboard_username_since(ts timestamptz)
+returns table (username text, coffees int)
+language sql
+security definer
+as $$
+  select c.username, count(*)::int as coffees
+  from public.coffees_by_username c
+  where c.timestamp >= ts
+  group by c.username
+  order by coffees desc;
+$$;
+
+grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;
+`.trim();
+
+  document.getElementById("sqlBlock").textContent = SQL;
+
+  window.onload = async () => {
     if (typeof window.supabase === "undefined") {
       alert("Supabase library failed to load. Check your internet connection.");
       return;
     }
 
-    if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
-        !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("PASTE_YOUR_SUPABASE_ANON_KEY_HERE")) {
-      // Developer misconfiguration; don't show SQL to users.
-      document.body.innerHTML = "<div style='max-width:700px;margin:40px auto;font-family:system-ui;background:#fff;padding:24px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.12)'><h2>App not configured</h2><p>The Supabase URL/Anon key have not been set in <code>index.html</code>.</p><p>Open the file, search for <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code>, paste your values, and redeploy.</p></div>";
-      return;
-    }
+    const cfg = localStorage.getItem("sb_cfg");
+    if (!cfg) return show("setup");
 
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { url, anonKey } = JSON.parse(cfg);
+    supabaseClient = window.supabase.createClient(url, anonKey);
 
     const savedUser = localStorage.getItem("coffee_username");
     if (savedUser) {
@@ -184,11 +330,12 @@ let currentUsername = null;
   };
 
   function show(which) {
-    ["login"].forEach(id => document.getElementById(id).classList.add("hidden"));
-    document.getElementById("app").classList.add("hidden");
+    // Hide all known screens
+    ["setup","auth","login"].forEach(id => el(id)?.classList.add("hidden"));
+    el("app")?.classList.add("hidden");
 
-    if (which === "app") document.getElementById("app").classList.remove("hidden");
-    else document.getElementById(which).classList.remove("hidden");
+    if (which === "app") el("app")?.classList.remove("hidden");
+    else el(which)?.classList.remove("hidden");
   }
 
   function setMsg(id, text, isError=false) {
