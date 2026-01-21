@@ -104,7 +104,7 @@
 
     <!-- SETUP (admin only: add ?admin=1) -->
     <div id="setup" class="card hidden">
-      <h1>☕ Coffee Tracker</h1>
+      <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
       <p class="subtitle">Admin setup (hidden)</p>
       <p class="muted">
         This page is only shown when you open the app with <code>?admin=1</code>.
@@ -121,7 +121,7 @@
 
     <!-- LOGIN (visible by default to avoid blank screen if JS fails) -->
     <div id="login" class="card">
-      <h1>☕ Coffee Tracker</h1>
+      <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
       <p class="subtitle">Username-only (no password)</p>
 
       <h2>Enter username</h2>
@@ -139,7 +139,7 @@
       <div class="card">
         <button class="btn-danger logout" onclick="logout()">Log out</button>
 
-        <h1>☕ Coffee Tracker</h1>
+        <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
         <p class="subtitle">User: <span id="displayUsername"></span></p>
 
         <div class="coffee-counter">
@@ -174,7 +174,6 @@
     // TODO: Replace these with your project values, then redeploy.
      const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
      const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
-
 
     // Admin-only SQL
     const SETUP_SQL = `
