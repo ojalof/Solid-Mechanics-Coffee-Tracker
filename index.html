@@ -133,7 +133,7 @@
       <p class="muted">
         This username will be used as the key for all your coffee data across devices.
       </p>
-      <input id="username" placeholder="Username (3–24 chars, letters/numbers/_ only)"/>
+      <input id="username" placeholder="Username (1–32 chars)"/>
       <button class="btn-primary" onclick="doLogin()">Continue</button>
       <div id="loginMsg" class="msg"></div>
     </div>
@@ -355,11 +355,12 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   }
 
   function doLogin() {
-    const u = document.getElementById("username").value.trim();
-    if (!validUsername(u)) return setMsg("loginMsg", "Invalid username (3–24 chars, letters/numbers/_ only).", true);
+    const u = document.getElementById("username").value;
+    const normalized = (u || "").trim();
+if (!validUsername(normalized)) return setMsg("loginMsg", "Invalid username (1–32 chars).", true);
 
-    currentUsername = u;
-    localStorage.setItem("coffee_username", u);
+    currentUsername = normalized;
+    localStorage.setItem("coffee_username", normalized);
     showApp();
   }
 
