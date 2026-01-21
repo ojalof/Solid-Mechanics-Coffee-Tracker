@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Coffee Tracker (Username Only - Insecure)</title>
+  <title>Coffee Tracker</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#667eea">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
 
   <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -93,46 +97,38 @@
       font-size: 12px;
     }
   </style>
-
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#667eea">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-
 </head>
 
 <body>
   <div class="container">
 
-    <!-- SETUP -->
-    
-        <!-- SETUP (admin only: add ?admin=1 to URL) -->
-        <div id="setup" class="card hidden">
-            <h1>☕ Coffee Tracker</h1>
-            <p class="subtitle">Admin setup (hidden)</p>
-            <p class="muted">
-              This page is only shown when you open the app with <code>?admin=1</code>.
-              Share the normal URL with friends (no setup text will appear).
-            </p>
+    <!-- SETUP (admin only: add ?admin=1) -->
+    <div id="setup" class="card hidden">
+      <h1>☕ Coffee Tracker</h1>
+      <p class="subtitle">Admin setup (hidden)</p>
+      <p class="muted">
+        This page is only shown when you open the app with <code>?admin=1</code>.
+        Share the normal URL with friends.
+      </p>
 
-            <h2 style="margin-top:16px;">SQL (run once)</h2>
-            <p class="muted">Run this in Supabase SQL Editor to create the table and open policies for the username-only version.</p>
-            <pre id="sqlBlock"></pre>
+      <h2 style="margin-top:16px;">SQL (run once)</h2>
+      <pre id="sqlBlock"></pre>
 
-            <button class="btn-secondary" onclick="copySQL()">Copy SQL</button>
-            <button class="btn-primary" onclick="goToApp()">Go to app</button>
-            <p id="setupMsg" class="msg"></p>
-        </div>
-</div>
+      <button class="btn-secondary" onclick="copySQL()">Copy SQL</button>
+      <button class="btn-primary" onclick="goToApp()">Go to app</button>
+      <div id="setupMsg" class="msg"></div>
+    </div>
 
-    <!-- "LOGIN" -->
+    <!-- LOGIN (visible by default to avoid blank screen if JS fails) -->
     <div id="login" class="card">
       <h1>☕ Coffee Tracker</h1>
       <p class="subtitle">Username-only (no password)</p>
 
       <h2>Enter username</h2>
       <p class="muted">
-        This username will be used as the key for all your coffee data across devices.
+        This username is the key for all your data (intentionally insecure). Anyone who knows a username can use it.
       </p>
+
       <input id="username" placeholder="Username (1–32 chars)"/>
       <button class="btn-primary" onclick="doLogin()">Continue</button>
       <div id="loginMsg" class="msg"></div>
@@ -170,94 +166,18 @@
 
   </div>
 
-<script>
-  // Use a different variable name than "supabase" to avoid conflicts with the global library.
-  let supabaseClient = null;
+  <script>
+    // Avoid naming conflict with global 'supabase' from the CDN
+    let supabaseClient = null;
 
-  // Hardcoded Supabase configuration (shared for all users)
-  // TODO: Replace these with your project values, then redeploy.
-  const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
+    // Hardcoded Supabase configuration (shared for all users)
+    // TODO: Replace these with your project values, then redeploy.
+     const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
+     const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
 
-  const SETUP_SQL = `-- Insecure username-only coffee tracker
--- This stores coffees by username text, with open read/write policies.
 
-create table if not exists public.coffees_by_username (
-  id uuid primary key default gen_random_uuid(),
-  username text not null,
-  timestamp timestamptz not null default now()
-);
-
-create index if not exists coffees_by_username_user_ts_idx
-  on public.coffees_by_username (username, timestamp desc);
-
-alter table public.coffees_by_username enable row level security;
-
--- Open policies (INSECURE): anyone can read/insert/delete/update.
-create policy if not exists "read all coffees"
-  on public.coffees_by_username for select
-  using (true);
-
-create policy if not exists "insert coffees"
-  on public.coffees_by_username for insert
-  with check (true);
-
-create policy if not exists "update coffees"
-  on public.coffees_by_username for update
-  using (true)
-  with check (true);
-
-create policy if not exists "delete coffees"
-  on public.coffees_by_username for delete
-  using (true);
-
--- Optional: leaderboard function (aggregates by username)
-create or replace function public.leaderboard_username_since(ts timestamptz)
-returns table (username text, coffees int)
-language sql
-security definer
-as $$
-  select c.username, count(*)::int as coffees
-  from public.coffees_by_username c
-  where c.timestamp >= ts
-  group by c.username
-  order by coffees desc;
-$$;
-
-grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;`.trim();
-
-  function el(id) {
-    return document.getElementById(id);
-  }
-
-  function showSetupAdmin() {
-    // Hide app + login, show setup
-    ["login"].forEach(id => el(id)?.classList.add("hidden"));
-    el("app")?.classList.add("hidden");
-    el("setup")?.classList.remove("hidden");
-    const pre = el("sqlBlock");
-    if (pre) pre.textContent = SETUP_SQL;
-  }
-
-  async function copySQL() {
-    try {
-      await navigator.clipboard.writeText(SETUP_SQL);
-      setMsg("setupMsg", "SQL copied to clipboard.", false);
-    } catch {
-      setMsg("setupMsg", "Could not copy automatically. Select the SQL and copy manually.", true);
-    }
-  }
-
-  function goToApp() {
-    const url = new URL(window.location.href);
-    url.searchParams.delete("admin");
-    window.location.href = url.toString();
-  }
-
-let currentUsername = null;
-  let currentLeaderboardView = "today";
-
-  const SQL = `
+    // Admin-only SQL
+    const SETUP_SQL = `
 -- Insecure username-only coffee tracker
 -- This stores coffees by username text, with open read/write policies.
 
@@ -306,188 +226,221 @@ $$;
 grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;
 `.trim();
 
-  document.getElementById("sqlBlock").textContent = SQL;
+    let currentUsername = null;
+    let currentLeaderboardView = "today";
 
-  window.onload = async () => {
-    if (typeof window.supabase === "undefined") {
-      alert("Supabase library failed to load. Check your internet connection.");
-      return;
+    function el(id) { return document.getElementById(id); }
+
+    function setMsg(id, text, isError=false) {
+      const node = el(id);
+      if (!node) return;
+      node.textContent = text;
+      node.className = "msg " + (isError ? "error" : "ok");
     }
 
-    const cfg = localStorage.getItem("sb_cfg");
-    if (!cfg) return show("setup");
-
-    const { url, anonKey } = JSON.parse(cfg);
-    supabaseClient = window.supabase.createClient(url, anonKey);
-
-    const savedUser = localStorage.getItem("coffee_username");
-    if (savedUser) {
-      currentUsername = savedUser;
-      showApp();
-    } else {
-      show("login");
-    }
-  };
-
-  function show(which) {
-    // Hide all known screens
-    ["setup","auth","login"].forEach(id => el(id)?.classList.add("hidden"));
-    el("app")?.classList.add("hidden");
-
-    if (which === "app") el("app")?.classList.remove("hidden");
-    else el(which)?.classList.remove("hidden");
-  }
-
-  function setMsg(id, text, isError=false) {
-    const el = document.getElementById(id);
-    el.textContent = text;
-    el.className = "msg " + (isError ? "error" : "ok");
-  }
-
-  );
-    supabaseClient = window.supabase.createClient(url, anonKey);
-
-    show("login");
-  }
-
-  function validUsername(u) {
-    return /^[A-Za-z0-9_]{3,24}$/.test(u);
-  }
-
-  function doLogin() {
-    const u = document.getElementById("username").value;
-    const normalized = (u || "").trim();
-if (!validUsername(normalized)) return setMsg("loginMsg", "Invalid username (1–32 chars).", true);
-
-    currentUsername = normalized;
-    localStorage.setItem("coffee_username", normalized);
-    showApp();
-  }
-
-  function logout() {
-    localStorage.removeItem("coffee_username");
-    currentUsername = null;
-    show("login");
-  }
-
-  function showApp() {
-    document.getElementById("displayUsername").textContent = currentUsername;
-    show("app");
-    loadData();
-  }
-
-  async function addCoffee() {
-    const { error } = await supabaseClient
-      .from("coffees_by_username")
-      .insert([{ username: currentUsername }]);
-
-    if (error) {
-      console.error("addCoffee:", error);
-      alert("Could not add coffee. Check console.");
-      return;
-    }
-    await loadData();
-  }
-
-  async function loadData() {
-    // Today count + history for this username
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    const { data, error } = await supabaseClient
-      .from("coffees_by_username")
-      .select("timestamp")
-      .eq("username", currentUsername)
-      .gte("timestamp", today.toISOString())
-      .order("timestamp", { ascending: false });
-
-    if (error) return console.error("loadData:", error);
-
-    document.getElementById("todayCount").textContent = (data || []).length;
-
-    const history = (data || []).slice(0, 10).map(r => {
-      const t = new Date(r.timestamp).toLocaleTimeString();
-      return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
-    }).join("");
-
-    document.getElementById("history").innerHTML =
-      history || `<p class="muted" style="text-align:center; margin-top:10px;">No coffees yet today.</p>`;
-
-    await loadLeaderboard();
-  }
-
-  function switchLeaderboard(evt) {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    evt.target.classList.add("active");
-    currentLeaderboardView = evt.target.getAttribute("data-view");
-    loadLeaderboard();
-  }
-
-  async function loadLeaderboard() {
-    let startDate = new Date();
-    switch (currentLeaderboardView) {
-      case "today":
-        startDate.setHours(0,0,0,0);
-        break;
-      case "week":
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case "month":
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      case "all":
-        startDate = new Date("2000-01-01");
-        break;
+    function hideAll() {
+      ["setup","login"].forEach(id => el(id)?.classList.add("hidden"));
+      el("app")?.classList.add("hidden");
     }
 
-    // Use RPC (fast) if available; otherwise fallback to client aggregation.
-    let rows = null;
+    function show(which) {
+      hideAll();
+      if (which === "app") el("app")?.classList.remove("hidden");
+      else el(which)?.classList.remove("hidden");
+    }
 
-    try {
-      const { data, error } = await supabaseClient.rpc("leaderboard_username_since", { ts: startDate.toISOString() });
-      if (!error) rows = data;
-    } catch (_) {}
+    function validUsername(u) {
+      if (!u) return false;
+      const s = u.trim();
+      if (s.length < 1 || s.length > 32) return false;
+      if (/[<>]/.test(s)) return false;
+      return true;
+    }
 
-    if (!rows) {
-      // Fallback: query coffees and aggregate in JS (can be slower)
-      const { data, error } = await supabaseClient
-        .from("coffees_by_username")
-        .select("username")
-        .gte("timestamp", startDate.toISOString());
+    function showSetupAdmin() {
+      show("setup");
+      const pre = el("sqlBlock");
+      if (pre) pre.textContent = SETUP_SQL;
+    }
 
-      if (error) {
-        console.error("leaderboard fallback:", error);
-        document.getElementById("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load leaderboard.</p>`;
+    async function copySQL() {
+      try {
+        await navigator.clipboard.writeText(SETUP_SQL);
+        setMsg("setupMsg", "SQL copied to clipboard.", false);
+      } catch {
+        setMsg("setupMsg", "Could not copy automatically. Select the SQL and copy manually.", true);
+      }
+    }
+
+    function goToApp() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("admin");
+      window.location.href = url.toString();
+    }
+
+    function doLogin() {
+      const raw = el("username")?.value ?? "";
+      const normalized = raw.trim();
+
+      if (!validUsername(normalized)) {
+        setMsg("loginMsg", "Invalid username (1–32 chars).", true);
         return;
       }
 
-      const counts = {};
-      (data || []).forEach(r => counts[r.username] = (counts[r.username] || 0) + 1);
-      rows = Object.entries(counts).map(([username, coffees]) => ({ username, coffees }))
-        .sort((a,b) => b.coffees - a.coffees);
+      currentUsername = normalized;
+      localStorage.setItem("coffee_username", normalized);
+      showApp();
     }
 
-    const html = (rows || []).slice(0, 10).map((row, idx) => {
-      const isMe = row.username === currentUsername;
-      return `<div class="leaderboard-item ${isMe ? "me" : ""}">
-        <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""}</span>
-        <span>${row.coffees} ☕</span>
-      </div>`;
-    }).join("");
+    function logout() {
+      localStorage.removeItem("coffee_username");
+      currentUsername = null;
+      show("login");
+    }
 
-    document.getElementById("leaderboard").innerHTML =
-      html || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
-  }
-</script>
+    function showApp() {
+      el("displayUsername").textContent = currentUsername;
+      show("app");
+      loadData();
+    }
 
-<script>
-  // PWA: register service worker (required for installability + future offline caching)
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(console.error);
-    });
-  }
-</script>
+    async function addCoffee() {
+      const { error } = await supabaseClient
+        .from("coffees_by_username")
+        .insert([{ username: currentUsername }]);
 
+      if (error) {
+        console.error("addCoffee:", error);
+        alert("Could not add coffee. Check console.");
+        return;
+      }
+
+      await loadData();
+    }
+
+    async function loadData() {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      const { data, error } = await supabaseClient
+        .from("coffees_by_username")
+        .select("timestamp")
+        .eq("username", currentUsername)
+        .gte("timestamp", today.toISOString())
+        .order("timestamp", { ascending: false });
+
+      if (error) {
+        console.error("loadData:", error);
+        setMsg("loginMsg", "Database error. Did you run the SQL? (Open with ?admin=1 to view it.)", true);
+        show("login");
+        return;
+      }
+
+      el("todayCount").textContent = (data || []).length;
+
+      const history = (data || []).slice(0, 10).map(r => {
+        const t = new Date(r.timestamp).toLocaleTimeString();
+        return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
+      }).join("");
+
+      el("history").innerHTML =
+        history || `<p class="muted" style="text-align:center; margin-top:10px;">No coffees yet today.</p>`;
+
+      await loadLeaderboard();
+    }
+
+    function switchLeaderboard(evt) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      evt.target.classList.add("active");
+      currentLeaderboardView = evt.target.getAttribute("data-view");
+      loadLeaderboard();
+    }
+
+    async function loadLeaderboard() {
+      let startDate = new Date();
+      switch (currentLeaderboardView) {
+        case "today":
+          startDate.setHours(0,0,0,0); break;
+        case "week":
+          startDate.setDate(startDate.getDate() - 7); break;
+        case "month":
+          startDate.setMonth(startDate.getMonth() - 1); break;
+        case "all":
+          startDate = new Date("2000-01-01"); break;
+      }
+
+      // Try RPC first; fall back to JS aggregation if RPC isn't installed.
+      let rows = null;
+
+      try {
+        const { data, error } = await supabaseClient.rpc("leaderboard_username_since", { ts: startDate.toISOString() });
+        if (!error) rows = data;
+      } catch (e) {}
+
+      if (!rows) {
+        const { data, error } = await supabaseClient
+          .from("coffees_by_username")
+          .select("username")
+          .gte("timestamp", startDate.toISOString());
+
+        if (error) {
+          console.error("leaderboard fallback:", error);
+          el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load leaderboard.</p>`;
+          return;
+        }
+
+        const counts = {};
+        (data || []).forEach(r => counts[r.username] = (counts[r.username] || 0) + 1);
+        rows = Object.entries(counts).map(([username, coffees]) => ({ username, coffees }))
+          .sort((a,b) => b.coffees - a.coffees);
+      }
+
+      const html = (rows || []).slice(0, 10).map((row, idx) => {
+        const isMe = row.username === currentUsername;
+        return `<div class="leaderboard-item ${isMe ? "me" : ""}">
+          <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""}</span>
+          <span>${row.coffees} ☕</span>
+        </div>`;
+      }).join("");
+
+      el("leaderboard").innerHTML =
+        html || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
+    }
+
+    window.onload = () => {
+      // Register service worker (PWA)
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js").catch(console.error);
+      }
+
+      if (typeof window.supabase === "undefined") {
+        setMsg("loginMsg", "Supabase library failed to load (network / CDN blocked).", true);
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("admin") === "1") {
+        showSetupAdmin();
+        return;
+      }
+
+      if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
+          !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("PASTE_YOUR_SUPABASE_ANON_KEY_HERE")) {
+        setMsg("loginMsg", "App not configured. The host must set SUPABASE_URL and SUPABASE_ANON_KEY in index.html.", true);
+        // login is visible by default
+        return;
+      }
+
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const savedUser = localStorage.getItem("coffee_username");
+      if (savedUser && validUsername(savedUser)) {
+        currentUsername = savedUser.trim();
+        showApp();
+      } else {
+        show("login");
+      }
+    };
+  </script>
 </body>
 </html>
