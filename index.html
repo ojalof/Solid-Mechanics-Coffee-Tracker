@@ -9,6 +9,27 @@
   <meta name="theme-color" content="#667eea">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
 
+  
+  <script>
+    // Early admin toggle (runs even if later scripts fail)
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("admin") === "1") {
+          window.__ADMIN__ = true;
+          document.addEventListener("DOMContentLoaded", function () {
+            var setup = document.getElementById("setup");
+            var login = document.getElementById("login");
+            var app = document.getElementById("app");
+            if (setup) setup.classList.remove("hidden");
+            if (login) login.classList.add("hidden");
+            if (app) app.classList.add("hidden");
+          });
+        }
+      } catch (e) {}
+    })();
+  </script>
+
   <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -114,7 +135,60 @@
       </p>
 
       <h2 style="margin-top:16px;">SQL (run once)</h2>
-      <pre id="sqlBlock"></pre>
+      <pre id="sqlBlock">
+-- Insecure username-only coffee tracker
+-- This stores coffees by username text, with open read/write policies.
+
+create table if not exists public.coffees_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+
+create index if not exists coffees_by_username_user_ts_idx
+  on public.coffees_by_username (username, timestamp desc);
+
+alter table public.coffees_by_username enable row level security;
+
+-- Re-runnable: drop policies if they already exist
+drop policy if exists &quot;read all coffees&quot; on public.coffees_by_username;
+drop policy if exists &quot;insert coffees&quot; on public.coffees_by_username;
+drop policy if exists &quot;update coffees&quot; on public.coffees_by_username;
+drop policy if exists &quot;delete coffees&quot; on public.coffees_by_username;
+
+-- Open policies (INSECURE): anyone can read/insert/delete/update.
+create policy &quot;read all coffees&quot;
+  on public.coffees_by_username for select
+  using (true);
+
+create policy &quot;insert coffees&quot;
+  on public.coffees_by_username for insert
+  with check (true);
+
+create policy &quot;update coffees&quot;
+  on public.coffees_by_username for update
+  using (true)
+  with check (true);
+
+create policy &quot;delete coffees&quot;
+  on public.coffees_by_username for delete
+  using (true);
+
+-- Optional: leaderboard function (aggregates by username)
+create or replace function public.leaderboard_username_since(ts timestamptz)
+returns table (username text, coffees int)
+language sql
+security definer
+as $$
+  select c.username, count(*)::int as coffees
+  from public.coffees_by_username c
+  where c.timestamp &gt;= ts
+  group by c.username
+  order by coffees desc;
+$$;
+
+grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;
+</pre>
 
       <button class="btn-secondary" onclick="copySQL()">Copy SQL</button>
       <button class="btn-primary" onclick="goToApp()">Go to app</button>
@@ -180,7 +254,7 @@
   </div>
 
   <script>
-    /* BUILD: v9-prefilled-supabase */
+    /* BUILD: v10-inline-sql */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -280,7 +354,10 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     function showSetupAdmin() {
       show("setup");
       const pre = el("sqlBlock");
-      if (pre) pre.textContent = SETUP_SQL;
+      // SQL is inlined in HTML; keep this as a fallback in case it's empty.
+      if (pre && (!pre.textContent || pre.textContent.trim().length === 0)) {
+        pre.textContent = SETUP_SQL;
+      }
     }
 
     async function copySQL() {
