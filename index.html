@@ -119,6 +119,9 @@
     }
   
     #statsText { font-size: 14px; line-height: 1.5; }
+
+    .brand { display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 8px; }
+    .brand-title { display:block; }
 </style>
 </head>
 
@@ -127,7 +130,7 @@
 
     <!-- SETUP (admin only: add ?admin=1) -->
     <div id="setup" class="card hidden">
-      <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
       <p class="subtitle">Admin setup (hidden)</p>
       <p class="muted">
         This page is only shown when you open the app with <code>?admin=1</code>.
@@ -197,7 +200,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     <!-- LOGIN (visible by default to avoid blank screen if JS fails) -->
     <div id="login" class="card">
-      <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
       <p class="subtitle">Username-only (no password)</p>
 
       <h2>Enter username</h2>
@@ -215,7 +218,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       <div class="card">
         <button class="btn-danger logout" onclick="logout()">Log out</button>
 
-        <h1><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span>Coffee Tracker</span></h1>
+        <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
         <p class="subtitle">User: <span id="displayUsername"></span></p>
 
         <div class="coffee-counter">
@@ -254,7 +257,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v12-caffeine-stats */
+    /* BUILD: v14-title-below-icon */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -553,8 +556,8 @@ Caffeine (70 mg/cup):
       const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const msPerDay = 24 * 60 * 60 * 1000;
-      const daysTracked = Math.max(1, Math.floor((todayDate - firstDate) / msPerDay)+1); // e.g. Jan 5 -> Jan 22 => 17
-      const avgPerDay = total / (daysTracked);
+      const daysTracked = Math.max(1, Math.floor((todayDate - firstDate) / msPerDay) + 1); // inclusive: count calendar dates from start to today
+      const avgPerDay = total / daysTracked;
 
       const countsByDay = {};
       for (const r of rows) {
