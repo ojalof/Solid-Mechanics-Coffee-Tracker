@@ -254,7 +254,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v10-inline-sql */
+    /* BUILD: v11-inline-sql-fixjs */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -520,11 +520,11 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       if (error) {
         console.error("stats query:", error);
-        el("statsText").textContent =
-          "Could not load stats. Make sure you ran the SQL and that SELECT is allowed.
+        el("statsText").textContent = `Could not load stats.
 
-" +
-          String(error.message || error);
+Make sure you ran the SQL (open ?admin=1), and that SELECT is allowed.
+
+Error: ${error.message || error}`;
         return;
       }
 
@@ -532,16 +532,11 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const total = rows.length;
 
       if (total === 0) {
-        el("statsText").textContent =
-          "Total coffees: 0
-" +
-          "Tracking since: (no data)
-" +
-          "Average per day: 0.0
-" +
-          "Max in a day: 0
-" +
-          "Today: 0";
+        el("statsText").textContent = `Total coffees: 0
+Tracking since: (no data)
+Average per day: 0.0
+Max in a day: 0
+Today: 0`;
         return;
       }
 
