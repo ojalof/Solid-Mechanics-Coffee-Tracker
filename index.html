@@ -128,7 +128,7 @@
 
       <h2>Enter username</h2>
       <p class="muted">
-        This username test is the key for all your data (intentionally insecure). Anyone who knows a username can use it.
+        This username is the key for all your data (intentionally insecure). Anyone who knows a username can use it.
       </p>
 
       <input id="username" placeholder="Username (1–32 chars)"/>
@@ -180,13 +180,15 @@
   </div>
 
   <script>
+    /* BUILD: v9-prefilled-supabase */
+
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
 
     // Hardcoded Supabase configuration (shared for all users)
     // TODO: Replace these with your project values, then redeploy.
-     const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
-     const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
+    const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
 
     // Admin-only SQL
     const SETUP_SQL = `
