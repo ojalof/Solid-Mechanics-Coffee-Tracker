@@ -254,7 +254,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v11-inline-sql-fixjs */
+    /* BUILD: v12-caffeine-stats */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -322,6 +322,9 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     let currentUsername = null;
     let currentLeaderboardView = "today";
+
+    const CAFFEINE_MG_PER_CUP = 70; // mg per coffee
+
 
     function el(id) { return document.getElementById(id); }
 
@@ -536,7 +539,11 @@ Error: ${error.message || error}`;
 Tracking since: (no data)
 Average per day: 0.0
 Max in a day: 0
-Today: 0`;
+Today: 0
+
+Caffeine (70 mg/cup):
+• Today: 0 mg
+• Average/day: 0 mg`;
         return;
       }
 
@@ -566,16 +573,15 @@ Today: 0`;
 
       const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
 
-      el("statsText").textContent =
-        `Total coffees: ${total}
-` +
-        `Tracking since: ${startStr} (${daysTracked} days)
-` +
-        `Average per day: ${avgPerDay.toFixed(1)}
-` +
-        `Max in a day: ${maxInDay}
-` +
-        `Today: ${todayCount}`;
+      el("statsText").textContent = `Total coffees: ${total}
+Tracking since: ${startStr} (${daysTracked} days)
+Average per day: ${avgPerDay.toFixed(1)}
+Max in a day: ${maxInDay}
+Today: ${todayCount}
+
+Caffeine (70 mg/cup):
+• Today: ${(todayCount * CAFFEINE_MG_PER_CUP).toFixed(0)} mg
+• Average/day: ${(avgPerDay * CAFFEINE_MG_PER_CUP).toFixed(0)} mg`;
     }
 
 
