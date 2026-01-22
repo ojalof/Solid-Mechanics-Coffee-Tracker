@@ -506,6 +506,13 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
 
   window.onload = () => {
+      // Admin page must work even if the Supabase CDN is blocked/offline
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("admin") === "1") {
+        showSetupAdmin();
+        return;
+      }
+
       // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js").catch(console.error);
@@ -516,13 +523,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         return;
       }
 
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("admin") === "1") {
-        showSetupAdmin();
-        return;
-      }
-
-      if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
+if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
           !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("PASTE_YOUR_SUPABASE_ANON_KEY_HERE")) {
         setMsg("loginMsg", "App not configured. The host must set SUPABASE_URL and SUPABASE_ANON_KEY in index.html.", true);
         // login is visible by default
