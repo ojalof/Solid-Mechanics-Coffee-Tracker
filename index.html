@@ -96,7 +96,9 @@
       background:#f7fafc; padding: 12px; border-radius: 10px; overflow-x: auto;
       font-size: 12px;
     }
-  </style>
+  
+    #statsText { font-size: 14px; line-height: 1.5; }
+</style>
 </head>
 
 <body>
@@ -146,10 +148,21 @@
           <div class="muted">Coffees today</div>
           <div class="count" id="todayCount">0</div>
           <button class="coffee-btn" onclick="addCoffee()">+ Add Coffee</button>
+          <button class="btn-primary" style="margin-top:12px;" onclick="showStats()">View Stats</button>
         </div>
 
         <h2 style="margin-top:22px;">Recent coffees</h2>
         <div id="history"></div>
+
+      <div id="statsCard" class="card hidden">
+        <button class="btn-danger logout" onclick="hideStats()">Close</button>
+        <h2 style="text-align:center; margin-top:6px;">📊 Your stats</h2>
+        <pre id="statsText"></pre>
+        <p class="muted" style="text-align:center; margin-top:10px;">
+          Stats are calculated from your coffee history for the current username.
+        </p>
+      </div>
+
       </div>
 
       <div class="card">
@@ -191,21 +204,27 @@ create index if not exists coffees_by_username_user_ts_idx
 
 alter table public.coffees_by_username enable row level security;
 
+-- Re-runnable: drop policies if they already exist
+drop policy if exists "read all coffees" on public.coffees_by_username;
+drop policy if exists "insert coffees" on public.coffees_by_username;
+drop policy if exists "update coffees" on public.coffees_by_username;
+drop policy if exists "delete coffees" on public.coffees_by_username;
+
 -- Open policies (INSECURE): anyone can read/insert/delete/update.
-create policy if not exists "read all coffees"
+create policy "read all coffees"
   on public.coffees_by_username for select
   using (true);
 
-create policy if not exists "insert coffees"
+create policy "insert coffees"
   on public.coffees_by_username for insert
   with check (true);
 
-create policy if not exists "update coffees"
+create policy "update coffees"
   on public.coffees_by_username for update
   using (true)
   with check (true);
 
-create policy if not exists "delete coffees"
+create policy "delete coffees"
   on public.coffees_by_username for delete
   using (true);
 
@@ -406,7 +425,87 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         html || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
     }
 
-    window.onload = () => {
+    function hideStats() {
+      el("statsCard")?.classList.add("hidden");
+    }
+
+    async function showStats() {
+      el("statsText").textContent = "Loading stats…";
+      el("statsCard")?.classList.remove("hidden");
+
+      const { data, error } = await supabaseClient
+        .from("coffees_by_username")
+        .select("timestamp")
+        .eq("username", currentUsername)
+        .order("timestamp", { ascending: true });
+
+      if (error) {
+        console.error("stats query:", error);
+        el("statsText").textContent =
+          "Could not load stats. Make sure you ran the SQL and that SELECT is allowed.
+
+" +
+          String(error.message || error);
+        return;
+      }
+
+      const rows = data || [];
+      const total = rows.length;
+
+      if (total === 0) {
+        el("statsText").textContent =
+          "Total coffees: 0
+" +
+          "Tracking since: (no data)
+" +
+          "Average per day: 0.0
+" +
+          "Max in a day: 0
+" +
+          "Today: 0";
+        return;
+      }
+
+      const firstTs = new Date(rows[0].timestamp);
+      const firstDate = new Date(firstTs.getFullYear(), firstTs.getMonth(), firstTs.getDate());
+      const now = new Date();
+      const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const daysTracked = Math.max(1, Math.floor((todayDate - firstDate) / msPerDay)); // e.g. Jan 5 -> Jan 22 => 17
+      const avgPerDay = total / daysTracked;
+
+      const countsByDay = {};
+      for (const r of rows) {
+        const d = new Date(r.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        countsByDay[key] = (countsByDay[key] || 0) + 1;
+      }
+
+      let maxInDay = 0;
+      for (const k in countsByDay) {
+        if (countsByDay[k] > maxInDay) maxInDay = countsByDay[k];
+      }
+
+      const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`;
+      const todayCount = countsByDay[todayKey] || 0;
+
+      const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
+
+      el("statsText").textContent =
+        `Total coffees: ${total}
+` +
+        `Tracking since: ${startStr} (${daysTracked} days)
+` +
+        `Average per day: ${avgPerDay.toFixed(1)}
+` +
+        `Max in a day: ${maxInDay}
+` +
+        `Today: ${todayCount}`;
+    }
+
+
+  window.onload = () => {
       // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js").catch(console.error);
