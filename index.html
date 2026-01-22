@@ -553,8 +553,8 @@ Caffeine (70 mg/cup):
       const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const msPerDay = 24 * 60 * 60 * 1000;
-      const daysTracked = Math.max(1, Math.floor((todayDate - firstDate) / msPerDay)); // e.g. Jan 5 -> Jan 22 => 17
-      const avgPerDay = total / (daysTracked+1);
+      const daysTracked = Math.max(1, Math.floor((todayDate - firstDate) / msPerDay)+1); // e.g. Jan 5 -> Jan 22 => 17
+      const avgPerDay = total / (daysTracked);
 
       const countsByDay = {};
       for (const r of rows) {
