@@ -120,10 +120,8 @@
   
     #statsText { font-size: 14px; line-height: 1.5; }
 
-    .brand { display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; gap: 8px !important; }
+    .brand { display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 8px; }
     .brand-title { display:block; }
-
-    .brand .logo { display:block; margin: 0 auto; }
 </style>
 </head>
 
@@ -259,7 +257,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v15-brand-column */
+    /* BUILD: v15-nocco-halflife */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -329,6 +327,9 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     let currentLeaderboardView = "today";
 
     const CAFFEINE_MG_PER_CUP = 70; // mg per coffee
+    const NOCCO_MG_PER_SERVING = 180; // mg per serving
+    const CAFFEINE_HALF_LIFE_HOURS = 5; // typical adult half-life (roughly 3–7 h)
+
 
 
     function el(id) { return document.getElementById(id); }
@@ -548,7 +549,15 @@ Today: 0
 
 Caffeine (70 mg/cup):
 • Today: 0 mg
-• Average/day: 0 mg`;
+• Average/day: 0 mg
+
+NOCCO equivalent (180 mg/serving):
+• Today: 0.00 servings
+• Average/day: 0.00 servings
+
+Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
+• Remaining: 0 mg
+• NOCCO equivalent: 0.00 servings`;
         return;
       }
 
@@ -576,7 +585,26 @@ Caffeine (70 mg/cup):
       const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`;
       const todayCount = countsByDay[todayKey] || 0;
 
-      const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
+      
+
+      // Estimated caffeine remaining in body now (simple half-life decay model)
+      // Assumptions: instantaneous absorption; elimination follows exponential decay with half-life.
+      const nowMs = now.getTime();
+      const halfLifeMs = CAFFEINE_HALF_LIFE_HOURS * 60 * 60 * 1000;
+      const ln2 = Math.LN2;
+
+      let caffeineRemainingMg = 0;
+      for (const r of rows) {
+        const tMs = new Date(r.timestamp).getTime();
+        const dtMs = Math.max(0, nowMs - tMs);
+        const remaining = CAFFEINE_MG_PER_CUP * Math.exp(-ln2 * (dtMs / halfLifeMs));
+        caffeineRemainingMg += remaining;
+      }
+
+      const noccoEqToday = (todayCount * CAFFEINE_MG_PER_CUP) / NOCCO_MG_PER_SERVING;
+      const noccoEqAvg = (avgPerDay * CAFFEINE_MG_PER_CUP) / NOCCO_MG_PER_SERVING;
+      const noccoEqRemaining = caffeineRemainingMg / NOCCO_MG_PER_SERVING;
+const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
 
       el("statsText").textContent = `Total coffees: ${total}
 Tracking since: ${startStr} (${daysTracked} days)
@@ -586,7 +614,15 @@ Today: ${todayCount}
 
 Caffeine (70 mg/cup):
 • Today: ${(todayCount * CAFFEINE_MG_PER_CUP).toFixed(0)} mg
-• Average/day: ${(avgPerDay * CAFFEINE_MG_PER_CUP).toFixed(0)} mg`;
+• Average/day: ${(avgPerDay * CAFFEINE_MG_PER_CUP).toFixed(0)} mg
+
+NOCCO equivalent (180 mg/serving):
+• Today: ${noccoEqToday.toFixed(2)} servings
+• Average/day: ${noccoEqAvg.toFixed(2)} servings
+
+Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
+• Remaining: ${caffeineRemainingMg.toFixed(0)} mg
+• NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings`;
     }
 
 
