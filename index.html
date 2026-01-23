@@ -231,16 +231,6 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
         <h2 style="margin-top:22px;">Recent coffees</h2>
         <div id="history"></div>
-
-      <div id="statsCard" class="card hidden">
-        <button class="btn-danger logout" onclick="hideStats()">Close</button>
-        <h2 style="text-align:center; margin-top:6px;">📊 Your stats</h2>
-        <pre id="statsText"></pre>
-        <p class="muted" style="text-align:center; margin-top:10px;">
-          Stats are calculated from your coffee history for the current username.
-        </p>
-      </div>
-
       </div>
 
       <div class="card">
@@ -254,12 +244,33 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         </div>
         <div id="leaderboard"></div>
       </div>
+
+      <div id="chartCard" class="card hidden">
+        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
+        <p class="muted" style="text-align:center; margin-top:6px;">
+          Simple half-life model (t½ ≈ <span id="hlLabel"></span> h). X-axis is hours of day.
+        </p>
+        <canvas id="caffeineChart" style="width:100%; height:320px; display:block;"></canvas>
+      </div>
+
+
+
+      <div id="statsCard" class="card hidden">
+        <button class="btn-danger logout" onclick="hideStats()">Close</button>
+        <h2 style="text-align:center; margin-top:6px;">📊 Your stats</h2>
+        <pre id="statsText"></pre>
+        <p class="muted" style="text-align:center; margin-top:10px;">
+          Stats are calculated from your coffee history for the current username.
+        </p>
+      </div>
+
+
     </div>
 
   </div>
 
   <script>
-    /* BUILD: v22-remove-coffee-and-hour-stats */
+    /* BUILD: v23-caffeine-chart */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -616,13 +627,122 @@ const history = (data || []).slice(0, 50).map(r => {
 
     function hideStats() {
       el("statsCard")?.classList.add("hidden");
+      el("chartCard")?.classList.add("hidden");
     }
+
+    
+    function renderCaffeineChart(coffeeTimestamps, halfLifeHours) {
+      const canvas = el("caffeineChart");
+      const hl = el("hlLabel");
+      if (hl) hl.textContent = String(halfLifeHours);
+
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const cssW = canvas.clientWidth || 800;
+      const cssH = canvas.clientHeight || 320;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const now = new Date();
+      const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const day0ms = day0.getTime();
+      const msPerHour = 60 * 60 * 1000;
+      const msPerDay = 24 * msPerHour;
+
+      const halfLifeMs = halfLifeHours * msPerHour;
+      const ln2 = Math.LN2;
+
+      const stepMs = 10 * 60 * 1000;
+      const points = [];
+      for (let t = 0; t <= msPerDay; t += stepMs) {
+        const timeMs = day0ms + t;
+        let c = 0;
+        for (const ts of coffeeTimestamps) {
+          if (ts > timeMs) continue;
+          const dt = timeMs - ts;
+          c += CAFFEINE_MG_PER_CUP * Math.exp(-ln2 * (dt / halfLifeMs));
+        }
+        points.push({ h: t / msPerHour, mg: c });
+      }
+
+      const maxY = Math.max(10, ...points.map(p => p.mg));
+      const pad = 30;
+      const w = cssW;
+      const h = cssH;
+
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.moveTo(pad, pad);
+      ctx.lineTo(pad, h - pad);
+      ctx.lineTo(w - pad, h - pad);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+      for (let xh = 0; xh <= 24; xh += 3) {
+        const x = pad + (xh / 24) * (w - 2 * pad);
+        ctx.strokeStyle = "rgba(0,0,0,0.08)";
+        ctx.beginPath();
+        ctx.moveTo(x, pad);
+        ctx.lineTo(x, h - pad);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillText(String(xh), x - 4, h - pad + 18);
+      }
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText("Hours", w - pad - 35, h - pad + 18);
+
+      const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
+      for (const f of yTicks) {
+        const val = f * maxY;
+        const y = (h - pad) - (val / maxY) * (h - 2 * pad);
+        ctx.strokeStyle = "rgba(0,0,0,0.08)";
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(w - pad, y);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillText(`${Math.round(val)} mg`, 6, y + 4);
+      }
+
+      ctx.strokeStyle = "rgba(102, 126, 234, 0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = pad + (p.h / 24) * (w - 2 * pad);
+        const y = (h - pad) - (p.mg / maxY) * (h - 2 * pad);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      const nowH = (Date.now() - day0ms) / msPerHour;
+      const xNow = pad + (Math.max(0, Math.min(24, nowH)) / 24) * (w - 2 * pad);
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.moveTo(xNow, pad);
+      ctx.lineTo(xNow, h - pad);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText("now", xNow - 10, pad - 8);
+    }
+
 
     async function showStats() {
       el("statsText").textContent = "Loading stats…";
       el("statsCard")?.classList.remove("hidden");
-
-      const { data, error } = await supabaseClient
+      el("chartCard")?.classList.remove("hidden");
+const { data, error } = await supabaseClient
         .from("coffees_by_username")
         .select("timestamp")
         .eq("username", currentUsername)
@@ -643,7 +763,13 @@ Error: ${error.message || error}`;
 
       
 
-      // Total coffees across all users (Solid Mechanics) since start
+      
+      const todayCoffeeMs = rows
+        .map(r => new Date(r.timestamp))
+        .filter(d => d.getFullYear() === todayDate.getFullYear() && d.getMonth() === todayDate.getMonth() && d.getDate() === todayDate.getDate())
+        .map(d => d.getTime());
+      renderCaffeineChart(todayCoffeeMs, CAFFEINE_HALF_LIFE_HOURS);
+// Total coffees across all users (Solid Mechanics) since start
       let solidMechanicsTotal = null;
       try {
         const res = await supabaseClient
@@ -654,7 +780,8 @@ Error: ${error.message || error}`;
         // ignore; keep null
       }
 if (total === 0) {
-        el("statsText").textContent = `Total coffees: 0
+        renderCaffeineChart([], CAFFEINE_HALF_LIFE_HOURS);
+el("statsText").textContent = `Total coffees: 0
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
 Cat treats (fun): Today 0, Solid Mechanics ${solidMechanicsTotal == null ? "?" : (solidMechanicsTotal * CAT_TREATS_PER_COFFEE)}
 Tracking since: (no data)
