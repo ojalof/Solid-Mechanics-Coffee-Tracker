@@ -249,6 +249,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
           <div class="tab" data-view="month" onclick="switchLeaderboard(event)">This Month</div>
           <div class="tab" data-view="all" onclick="switchLeaderboard(event)">All Time</div>
+          <div class="tab" data-view="maxday" onclick="switchLeaderboard(event)">Max/day</div>
         </div>
         <div id="leaderboard"></div>
       </div>
@@ -257,7 +258,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v17-time-to-zero */
+    /* BUILD: v18-maxday-leaderboard */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -475,7 +476,56 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           startDate = new Date("2000-01-01"); break;
       }
 
-      // Try RPC first; fall back to JS aggregation if RPC isn't installed.
+      
+
+      // Special leaderboard: maximum coffees in a single day per user (all-time)
+      if (currentLeaderboardView === "maxday") {
+        const { data, error } = await supabaseClient
+          .from("coffees_by_username")
+          .select("username,timestamp");
+
+        if (error) {
+          console.error("maxday leaderboard:", error);
+          el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load max/day leaderboard.</p>`;
+          return;
+        }
+
+        // Count coffees per user per calendar day, then take max per user.
+        const perUserDay = {};
+        for (const r of (data || [])) {
+          const d = new Date(r.timestamp);
+          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const key = `${r.username}|||${dayKey}`;
+          perUserDay[key] = (perUserDay[key] || 0) + 1;
+        }
+
+        const maxByUser = {}; // username -> {coffees, day}
+        for (const key in perUserDay) {
+          const [username, day] = key.split("|||");
+          const c = perUserDay[key];
+          const prev = maxByUser[username];
+          if (!prev || c > prev.coffees) {
+            maxByUser[username] = { coffees: c, day };
+          }
+        }
+
+        const rows = Object.entries(maxByUser)
+          .map(([username, obj]) => ({ username, coffees: obj.coffees, day: obj.day }))
+          .sort((a,b) => (b.coffees - a.coffees) || a.username.localeCompare(b.username));
+
+        const htmlOut = (rows || []).slice(0, 10).map((row, idx) => {
+          const isMe = row.username === currentUsername;
+          return `<div class="leaderboard-item ${isMe ? "me" : ""}">
+            <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""} <span class="muted" style="font-size:12px; ${isMe ? "color: rgba(255,255,255,0.85);" : ""}">(${row.day})</span></span>
+            <span>${row.coffees} ☕</span>
+          </div>`;
+        }).join("");
+
+        el("leaderboard").innerHTML =
+          htmlOut || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
+        return;
+      }
+// Try RPC first; fall back to JS aggregation if RPC isn't installed.
       let rows = null;
 
       try {
