@@ -275,7 +275,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v28-fix-login-remove-coffee */
+    /* BUILD: v26-plot-matches-stats-stops-now */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -451,13 +451,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const today = new Date();
       today.setHours(0,0,0,0);
 
-      // Find the most recent coffee today for this user
+      const PLOT_LOOKBACK_HOURS = 48; // include residual caffeine from previous intake
+      const lookback = new Date(today.getTime() - PLOT_LOOKBACK_HOURS * 60 * 60 * 1000);
+
       const { data, error } = await supabaseClient
         .from("coffees_by_username")
-        .select("id,timestamp")
+        .select("timestamp")
         .eq("username", currentUsername)
-        .gte("timestamp", today.toISOString())
-        .order("timestamp", { ascending: false })
+        .gte("timestamp", lookback.toISOString())
+.order("timestamp", { ascending: false })
         .limit(1);
 
       if (error) {
@@ -474,35 +476,12 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       const del = await supabaseClient
         .from("coffees_by_username")
-        .delete({ returning: "minimal" })
+        .delete()
         .eq("id", last.id);
 
       if (del.error) {
         console.error("removeLastCoffee delete:", del.error);
-        alert("Could not remove coffee: " + String(del.error.message || del.error) + "\\n\\nIf this persists, ensure your SQL includes a DELETE policy for public.coffees_by_username.");
-        return;
-      }
-
-      await loadData();
-    }
-
-
-      const last = (data || [])[0];
-      if (!last) return;
-
-      const ok = confirm("Remove your most recent coffee from today?");
-      if (!ok) return;
-
-      const del = await supabaseClient
-        .from("coffees_by_username")
-        .delete({ returning: "minimal" })
-        .eq("id", last.id);
-
-      if (del.error) {
-        console.error("removeLastCoffee delete:", del.error);
-        alert("Could not remove coffee: " + String(del.error.message || del.error) + "
-
-If this persists, ensure your SQL includes a DELETE policy for public.coffees_by_username.");
+        alert("Could not remove coffee. Check console.");
         return;
       }
 
