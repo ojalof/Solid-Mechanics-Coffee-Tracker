@@ -261,7 +261,8 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         <button class="btn-danger logout" onclick="hidePlot()">Close</button>
         <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
         <p class="muted" style="text-align:center; margin-top:6px;">
-          Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. Includes residual caffeine from the last 48 hours. X-axis is hours of the day (0–24).
+          Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. Includes residual caffeine from previous intake.
+X-axis is hours of the day (0–24).
         </p>
         <canvas id="caffeineCanvas" style="width:100%; height:320px; display:block;"></canvas>
         <p class="muted" style="text-align:center; margin-top:10px;">
@@ -274,7 +275,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v25-plot-includes-residual */
+    /* BUILD: v26-plot-matches-stats-stops-now */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -803,17 +804,15 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
         return;
       }
 
-      const today = new Date();
-      today.setHours(0,0,0,0);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const { data, error } = await supabaseClient
         .from("coffees_by_username")
         .select("timestamp")
         .eq("username", currentUsername)
-        .gte("timestamp", today.toISOString())
         .order("timestamp", { ascending: true });
-
-      if (error) {
+if (error) {
         console.error("plot query:", error);
         drawCaffeinePlot([], "Could not load data.");
         return;
@@ -847,6 +846,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const day0ms = day0.getTime();
       const msPerHour = 60 * 60 * 1000;
       const msPerDay = 24 * msPerHour;
+      const nowOffsetMs = Math.max(0, Math.min(msPerDay, Date.now() - day0ms));
 
       const halfLifeMs = CAFFEINE_HALF_LIFE_HOURS * msPerHour;
       const ln2 = Math.LN2;
@@ -854,7 +854,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       // Sample every 10 minutes
       const stepMs = 10 * 60 * 1000;
       const points = [];
-      for (let t = 0; t <= msPerDay; t += stepMs) {
+      for (let t = 0; t <= nowOffsetMs; t += stepMs) {
         const timeMs = day0ms + t;
         let c = 0;
         for (const ts of coffeeTimestampsMs) {
