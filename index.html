@@ -259,9 +259,9 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       <div id="plotCard" class="card hidden">
         <button class="btn-danger logout" onclick="hidePlot()">Close</button>
-        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine in blood over time (today)</h2>
+        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
         <p class="muted" style="text-align:center; margin-top:6px;">
-          Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. X-axis is hours of the day (0–24).
+          Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. Includes residual caffeine from the last 48 hours. X-axis is hours of the day (0–24).
         </p>
         <canvas id="caffeineCanvas" style="width:100%; height:320px; display:block;"></canvas>
         <p class="muted" style="text-align:center; margin-top:10px;">
@@ -274,7 +274,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v24-plot-tab-addition */
+    /* BUILD: v25-plot-includes-residual */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -450,12 +450,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const today = new Date();
       today.setHours(0,0,0,0);
 
+      const PLOT_LOOKBACK_HOURS = 48; // include residual caffeine from previous intake
+      const lookback = new Date(today.getTime() - PLOT_LOOKBACK_HOURS * 60 * 60 * 1000);
+
       const { data, error } = await supabaseClient
         .from("coffees_by_username")
-        .select("id,timestamp")
+        .select("timestamp")
         .eq("username", currentUsername)
-        .gte("timestamp", today.toISOString())
-        .order("timestamp", { ascending: false })
+        .gte("timestamp", lookback.toISOString())
+.order("timestamp", { ascending: false })
         .limit(1);
 
       if (error) {
@@ -766,13 +769,10 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
-• Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups)
-
 Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
