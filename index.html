@@ -225,6 +225,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <div class="muted">Coffees today</div>
           <div class="count" id="todayCount">0</div>
           <button class="coffee-btn" onclick="addCoffee()">+ Add Coffee</button>
+          <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled>− Remove last coffee</button>
           <button class="btn-primary" style="margin-top:12px;" onclick="showStats()">View Stats</button>
         </div>
 
@@ -258,7 +259,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v21-cat-treats-only */
+    /* BUILD: v22-remove-coffee-and-hour-stats */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -426,13 +427,55 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       await loadData();
     }
 
+
+    async function removeLastCoffee() {
+      if (!currentUsername) return;
+
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      const { data, error } = await supabaseClient
+        .from("coffees_by_username")
+        .select("id,timestamp")
+        .eq("username", currentUsername)
+        .gte("timestamp", today.toISOString())
+        .order("timestamp", { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error("removeLastCoffee select:", error);
+        alert("Could not find last coffee. Check console.");
+        return;
+      }
+
+      const last = (data || [])[0];
+      if (!last) return;
+
+      const ok = confirm("Remove your most recent coffee from today?");
+      if (!ok) return;
+
+      const del = await supabaseClient
+        .from("coffees_by_username")
+        .delete()
+        .eq("id", last.id);
+
+      if (del.error) {
+        console.error("removeLastCoffee delete:", del.error);
+        alert("Could not remove coffee. Check console.");
+        return;
+      }
+
+      await loadData();
+    }
+
+
     async function loadData() {
       const today = new Date();
       today.setHours(0,0,0,0);
 
       const { data, error } = await supabaseClient
         .from("coffees_by_username")
-        .select("timestamp")
+        .select("id,timestamp")
         .eq("username", currentUsername)
         .gte("timestamp", today.toISOString())
         .order("timestamp", { ascending: false });
@@ -446,7 +489,14 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       el("todayCount").textContent = (data || []).length;
 
-      const history = (data || []).slice(0, 50).map(r => {
+      
+      const rmBtn = el("removeCoffeeBtn");
+      if (rmBtn) {
+        const n = (data || []).length;
+        rmBtn.disabled = n < 1;
+        rmBtn.style.opacity = n < 1 ? "0.5" : "1";
+      }
+const history = (data || []).slice(0, 50).map(r => {
         const t = new Date(r.timestamp).toLocaleTimeString();
         return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
       }).join("");
@@ -606,11 +656,12 @@ Error: ${error.message || error}`;
 if (total === 0) {
         el("statsText").textContent = `Total coffees: 0
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-Cat: Today ${todayCount * CAT_TREATS_PER_COFFEE}, Solid Mechanics ${solidMechanicsTotal == null ? "?" : (solidMechanicsTotal * CAT_TREATS_PER_COFFEE)}
+Cat treats (fun): Today 0, Solid Mechanics ${solidMechanicsTotal == null ? "?" : (solidMechanicsTotal * CAT_TREATS_PER_COFFEE)}
 Tracking since: (no data)
 Average per day: 0.0
 Max in a day: 0
 Today: 0
+Coffees per hour today: 0.00
 
 Caffeine (70 mg/cup):
 • Today: 0 mg
@@ -653,7 +704,20 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 
       
 
-      // Estimated caffeine remaining in body now (simple half-life decay model)
+      
+
+      // Coffees per hour (today): time since first coffee today (min 0.25 h)
+      let coffeesPerHourToday = 0;
+      if (todayCount > 0) {
+        const todayTimes = rows
+          .map(r => new Date(r.timestamp))
+          .filter(d => d.getFullYear() === todayDate.getFullYear() && d.getMonth() === todayDate.getMonth() && d.getDate() === todayDate.getDate())
+          .map(d => d.getTime());
+        const firstTodayMs = Math.min(...todayTimes);
+        const hoursSinceFirst = Math.max(0.25, (now.getTime() - firstTodayMs) / (60 * 60 * 1000));
+        coffeesPerHourToday = todayCount / hoursSinceFirst;
+      }
+// Estimated caffeine remaining in body now (simple half-life decay model)
       // Assumptions: instantaneous absorption; elimination follows exponential decay with half-life.
       const nowMs = now.getTime();
       const halfLifeMs = CAFFEINE_HALF_LIFE_HOURS * 60 * 60 * 1000;
@@ -686,12 +750,11 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
-• Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups)
+Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
 • Today: ${(todayCount * CAFFEINE_MG_PER_CUP).toFixed(0)} mg
