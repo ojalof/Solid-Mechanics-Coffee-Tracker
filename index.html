@@ -266,7 +266,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       <div id="plotCard" class="card hidden">
         <button class="btn-danger logout" onclick="hidePlot()">Close</button>
-        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine content in blood over time (today)</h2>
+        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
         <p class="muted" style="text-align:center; margin-top:6px;">
           Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. Includes residual caffeine from previous intake.
 X-axis is hours of the day (0–24).
@@ -282,7 +282,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v29-mobile-plot-resize */
+    /* BUILD: v30-plot-threshold-150mg */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -783,6 +783,7 @@ Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
 • Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups) 💀
+
 Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
@@ -940,6 +941,21 @@ if (error) {
 
         ctx.fillStyle = "rgba(0,0,0,0.6)";
         ctx.fillText(`${Math.round(val)} mg`, 6, y + 4);
+      }
+
+      // Threshold line (recommended max)
+      const THRESHOLD_MG = 150;
+      if (THRESHOLD_MG <= maxY) {
+        const yThr = yOfMg(THRESHOLD_MG);
+        ctx.strokeStyle = "rgba(245, 101, 101, 0.85)";
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(x0, yThr);
+        ctx.lineTo(x1, yThr);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(245, 101, 101, 0.9)";
+        ctx.fillText("150 mg threshold", x0 + 6, Math.max(y1 + 12, yThr - 6));
       }
 
       // Line
