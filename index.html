@@ -122,6 +122,13 @@
 
     .brand { display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 8px; }
     .brand-title { display:block; }
+
+    /* Plot: mobile-friendly sizing */
+    #caffeineCanvas { width: 100%; height: 46vh; max-height: 520px; min-height: 300px; display:block; }
+    @media (orientation: landscape) {
+      #caffeineCanvas { height: 70vh; max-height: 420px; min-height: 260px; }
+    }
+
 </style>
 </head>
 
@@ -275,7 +282,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v26b-remove-delete-minimal */
+    /* BUILD: v29-mobile-plot-resize */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -789,6 +796,9 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 • NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings
 • Time until ~0% (<1 mg): ${timeToZeroStr}`;
     }
+    let lastPlotTimestampsMs = [];
+    let lastPlotNote = "";
+    let plotRedrawTimer = null;
 
     function hidePlot() {
       el("plotCard")?.classList.add("hidden");
@@ -799,8 +809,12 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       el("plotHalfLife").textContent = String(CAFFEINE_HALF_LIFE_HOURS);
       el("plotCard")?.classList.remove("hidden");
 
-      if (!supabaseClient || !currentUsername) {
-        drawCaffeinePlot([], "Not logged in.");
+      // After the card becomes visible, redraw once layout has settled (mobile)
+      setTimeout(() => handlePlotResize(), 0);
+if (!supabaseClient || !currentUsername) {
+        lastPlotTimestampsMs = [];
+        lastPlotNote = "Not logged in.";
+        drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
         return;
       }
 
@@ -814,13 +828,17 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
         .order("timestamp", { ascending: true });
 if (error) {
         console.error("plot query:", error);
-        drawCaffeinePlot([], "Could not load data.");
+        lastPlotTimestampsMs = [];
+        lastPlotNote = "Could not load data.";
+        drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
         return;
       }
 
       const coffeeMs = (data || []).map(r => new Date(r.timestamp).getTime());
-      drawCaffeinePlot(coffeeMs, coffeeMs.length ? "" : "No coffees logged today.");
-    }
+      lastPlotTimestampsMs = coffeeMs;
+      lastPlotNote = coffeeMs.length ? "" : "No coffees logged today.";
+      drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
+}
 
     function drawCaffeinePlot(coffeeTimestampsMs, noteText) {
       const canvas = el("caffeineCanvas");
@@ -838,7 +856,11 @@ if (error) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const w = cssW, h = cssH;
-      const padL = 42, padR = 18, padT = 18, padB = 34;
+      const smallScreen = w < 420;
+      const padL = smallScreen ? 34 : 42;
+      const padR = 18;
+      const padT = 16;
+      const padB = smallScreen ? 30 : 34;
 
       // Time axis: hours of day 0..24
       const now = new Date();
@@ -885,10 +907,11 @@ if (error) {
       ctx.stroke();
 
       // Grid + labels
-      ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctx.font = (smallScreen ? "11px" : "12px") + " -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif";
 
-      // X ticks every 3 hours
-      for (let hh = 0; hh <= 24; hh += 3) {
+      // X ticks: fewer labels on small screens
+      const xStep = smallScreen ? 6 : 3;
+      for (let hh = 0; hh <= 24; hh += xStep) {
         const x = xOfH(hh);
         ctx.strokeStyle = "rgba(0,0,0,0.08)";
         ctx.beginPath();
@@ -947,6 +970,20 @@ if (error) {
         ctx.fillText(noteText, x0 + 8, y1 + 16);
       }
     }
+
+    function handlePlotResize() {
+      const plot = el("plotCard");
+      if (!plot || plot.classList.contains("hidden")) return;
+
+      // Debounce rapid resize/orientation events
+      if (plotRedrawTimer) clearTimeout(plotRedrawTimer);
+      plotRedrawTimer = setTimeout(() => {
+        drawCaffeinePlot(lastPlotTimestampsMs || [], lastPlotNote || "");
+      }, 120);
+    }
+
+    window.addEventListener("resize", handlePlotResize);
+    window.addEventListener("orientationchange", handlePlotResize);
 
 
   window.onload = () => {
