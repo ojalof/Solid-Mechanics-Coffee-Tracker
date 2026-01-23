@@ -686,11 +686,12 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
+• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
+• Enough to kill: ${Math.floor(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 
 Caffeine (70 mg/cup):
 • Today: ${(todayCount * CAFFEINE_MG_PER_CUP).toFixed(0)} mg
