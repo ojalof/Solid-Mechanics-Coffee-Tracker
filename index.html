@@ -258,7 +258,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v18-maxday-leaderboard */
+    /* BUILD: v19-solid-mechanics-total */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -590,8 +590,21 @@ Error: ${error.message || error}`;
       const rows = data || [];
       const total = rows.length;
 
-      if (total === 0) {
+      
+
+      // Total coffees across all users (Solid Mechanics) since start
+      let solidMechanicsTotal = null;
+      try {
+        const res = await supabaseClient
+          .from("coffees_by_username")
+          .select("id", { count: "exact", head: true });
+        if (!res.error) solidMechanicsTotal = res.count;
+      } catch (e) {
+        // ignore; keep null
+      }
+if (total === 0) {
         el("statsText").textContent = `Total coffees: 0
+Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
 Tracking since: (no data)
 Average per day: 0.0
 Max in a day: 0
@@ -670,6 +683,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
 
       el("statsText").textContent = `Total coffees: ${total}
+Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
