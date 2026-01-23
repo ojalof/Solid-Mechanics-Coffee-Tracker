@@ -275,7 +275,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v26-plot-matches-stats-stops-now */
+    /* BUILD: v27-fix-remove-coffee */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -476,12 +476,14 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       const del = await supabaseClient
         .from("coffees_by_username")
-        .delete()
+        .delete({ returning: "minimal" })
         .eq("id", last.id);
 
       if (del.error) {
         console.error("removeLastCoffee delete:", del.error);
-        alert("Could not remove coffee. Check console.");
+        alert("Could not remove coffee: " + String(del.error.message || del.error) + "
+
+If this persists, ensure your SQL includes a DELETE policy for public.coffees_by_username.");
         return;
       }
 
