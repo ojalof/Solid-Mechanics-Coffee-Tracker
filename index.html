@@ -686,7 +686,8 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
 
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-Cats killed: ${solidMechanicsTotal/4 ?? "?"}
+const CatsKilled = Math.floor(solidMechanicsTotal/4);
+Cats killed: ${CatsKilled ?? "?"}
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
