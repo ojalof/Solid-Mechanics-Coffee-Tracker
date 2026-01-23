@@ -257,7 +257,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v15-nocco-halflife */
+    /* BUILD: v17-time-to-zero */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -557,7 +557,8 @@ NOCCO equivalent (180 mg/serving):
 
 Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 • Remaining: 0 mg
-• NOCCO equivalent: 0.00 servings`;
+• NOCCO equivalent: 0.00 servings
+• Time until ~0% (<1 mg): 0h 00m`;
         return;
       }
 
@@ -604,6 +605,18 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const noccoEqToday = (todayCount * CAFFEINE_MG_PER_CUP) / NOCCO_MG_PER_SERVING;
       const noccoEqAvg = (avgPerDay * CAFFEINE_MG_PER_CUP) / NOCCO_MG_PER_SERVING;
       const noccoEqRemaining = caffeineRemainingMg / NOCCO_MG_PER_SERVING;
+
+
+      // Time until caffeine is ~0% (mathematically never reaches 0, so we use a tiny threshold)
+      const ZERO_THRESHOLD_MG = 1; // treat <1 mg as ~0%
+      let timeToZeroHours = 0;
+      if (caffeineRemainingMg > ZERO_THRESHOLD_MG) {
+        timeToZeroHours = CAFFEINE_HALF_LIFE_HOURS * (Math.log(caffeineRemainingMg / ZERO_THRESHOLD_MG) / Math.LN2);
+      }
+      const timeToZeroMins = Math.max(0, Math.round(timeToZeroHours * 60));
+      const timeToZeroH = Math.floor(timeToZeroMins / 60);
+      const timeToZeroMin = timeToZeroMins % 60;
+      const timeToZeroStr = `${timeToZeroH}h ${String(timeToZeroMin).padStart(2,'0')}m`;
 const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
 
       el("statsText").textContent = `Total coffees: ${total}
@@ -622,7 +635,8 @@ NOCCO equivalent (180 mg/serving):
 
 Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 • Remaining: ${caffeineRemainingMg.toFixed(0)} mg
-• NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings`;
+• NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings
+• Time until ~0% (<1 mg): ${timeToZeroStr}`;
     }
 
 
