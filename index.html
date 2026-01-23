@@ -259,7 +259,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       <div id="plotCard" class="card hidden">
         <button class="btn-danger logout" onclick="hidePlot()">Close</button>
-        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
+        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine in blood over time (today)</h2>
         <p class="muted" style="text-align:center; margin-top:6px;">
           Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. X-axis is hours of the day (0–24).
         </p>
@@ -766,10 +766,13 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
+• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
+• Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups)
+
 Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
