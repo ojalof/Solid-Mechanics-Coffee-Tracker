@@ -446,7 +446,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       el("todayCount").textContent = (data || []).length;
 
-      const history = (data || []).slice(0, 10).map(r => {
+      const history = (data || []).slice(0, 50).map(r => {
         const t = new Date(r.timestamp).toLocaleTimeString();
         return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
       }).join("");
@@ -514,7 +514,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           .map(([username, obj]) => ({ username, coffees: obj.coffees, day: obj.day }))
           .sort((a,b) => (b.coffees - a.coffees) || a.username.localeCompare(b.username));
 
-        const htmlOut = (rows || []).slice(0, 10).map((row, idx) => {
+        const htmlOut = (rows || []).slice(0, 50).map((row, idx) => {
           const isMe = row.username === currentUsername;
           return `<div class="leaderboard-item ${isMe ? "me" : ""}">
             <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""} <span class="muted" style="font-size:12px; ${isMe ? "color: rgba(255,255,255,0.85);" : ""}">(${row.day})</span></span>
@@ -552,7 +552,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           .sort((a,b) => b.coffees - a.coffees);
       }
 
-      const html = (rows || []).slice(0, 10).map((row, idx) => {
+      const html = (rows || []).slice(0, 50).map((row, idx) => {
         const isMe = row.username === currentUsername;
         return `<div class="leaderboard-item ${isMe ? "me" : ""}">
           <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""}</span>
