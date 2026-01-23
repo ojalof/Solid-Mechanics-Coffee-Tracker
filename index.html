@@ -258,7 +258,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v19-solid-mechanics-total */
+    /* BUILD: v21-cat-treats-only */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -330,6 +330,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     const CAFFEINE_MG_PER_CUP = 70; // mg per coffee
     const NOCCO_MG_PER_SERVING = 180; // mg per serving
     const CAFFEINE_HALF_LIFE_HOURS = 5; // typical adult half-life (roughly 3–7 h)
+    const CAT_TREATS_PER_COFFEE = 1; // fun stat: 1 coffee = 1 cat treat
 
 
 
@@ -605,6 +606,7 @@ Error: ${error.message || error}`;
 if (total === 0) {
         el("statsText").textContent = `Total coffees: 0
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
+Cat treats (fun): Today ${todayCount * CAT_TREATS_PER_COFFEE}, Solid Mechanics ${solidMechanicsTotal == null ? "?" : (solidMechanicsTotal * CAT_TREATS_PER_COFFEE)}
 Tracking since: (no data)
 Average per day: 0.0
 Max in a day: 0
