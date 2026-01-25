@@ -263,7 +263,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
           <div class="tab" data-view="month" onclick="switchLeaderboard(event)">This Month</div>
           <div class="tab" data-view="all" onclick="switchLeaderboard(event)">All Time</div>
-          <div class="tab" data-view="maxday" onclick="switchLeaderboard(event)">Max/day</div>
+          <div class="tab" data-view="maxday" onclick="switchLeaderboard(event)"><span id="maxdayTabText">Max/day</span></div>
         </div>
         <div id="leaderboard"></div>
       </div>
@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v35-beer-mode-tracks-beers-fixed */
+    /* BUILD: v36-fix-beer-counts */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -387,7 +387,11 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const lbHeader = el("leaderboardHeader");
       if (lbHeader) lbHeader.textContent = beer ? "🍺 Beerboard" : "🏆 Leaderboard";
 
-      // Stats + caffeine plot are coffee-specific; hide in Beer mode.
+      
+
+      const maxdayTab = document.getElementById("maxdayTabText");
+      if (maxdayTab) maxdayTab.textContent = beer ? "Max/day" : "Max/day";
+// Stats + caffeine plot are coffee-specific; hide in Beer mode.
       const statsBtn = el("statsBtn");
       const plotBtn  = el("plotBtn");
       if (statsBtn) statsBtn.style.display = beer ? "none" : "";
@@ -607,10 +611,10 @@ const history = (data || []).slice(0, 50).map(r => {
 
       
 
-      // Special leaderboard: maximum coffees in a single day per user (all-time)
+      // Special leaderboard: maximum drinks in a single day per user (all-time)
       if (currentLeaderboardView === "maxday") {
         const { data, error } = await supabaseClient
-          .from("coffees_by_username")
+          .from(getActiveTable())
           .select("username,timestamp");
 
         if (error) {
@@ -619,7 +623,7 @@ const history = (data || []).slice(0, 50).map(r => {
           return;
         }
 
-        // Count coffees per user per calendar day, then take max per user.
+        // Count drinks per user per calendar day, then take max per user.
         const perUserDay = {};
         for (const r of (data || [])) {
           const d = new Date(r.timestamp);
@@ -646,7 +650,7 @@ const history = (data || []).slice(0, 50).map(r => {
           const isMe = row.username === currentUsername;
           return `<div class="leaderboard-item ${isMe ? "me" : ""}">
             <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""} <span class="muted" style="font-size:12px; ${isMe ? "color: rgba(255,255,255,0.85);" : ""}">(${row.day})</span></span>
-            <span>${row.coffees} ☕</span>
+            <span>${row.coffees} ${getDrinkEmoji()}</span>
           </div>`;
         }).join("");
 
@@ -684,7 +688,7 @@ const history = (data || []).slice(0, 50).map(r => {
         const isMe = row.username === currentUsername;
         return `<div class="leaderboard-item ${isMe ? "me" : ""}">
           <span>${idx+1}. ${row.username} ${isMe ? "(You)" : ""}</span>
-          <span>${row.coffees} ☕</span>
+          <span>${row.coffees} ${getDrinkEmoji()}</span>
         </div>`;
       }).join("");
 
