@@ -142,7 +142,7 @@
 
     <!-- SETUP (admin only: add ?admin=1) -->
     <div id="setup" class="card hidden">
-      <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
       <p class="subtitle">Admin setup (hidden)</p>
       <p class="muted">
         This page is only shown when you open the app with <code>?admin=1</code>.
@@ -212,7 +212,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     <!-- LOGIN (visible by default to avoid blank screen if JS fails) -->
     <div id="login" class="card">
-      <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
       <p class="subtitle">Username-only (no password)</p>
 
       <h2>Enter username</h2>
@@ -230,7 +230,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       <div class="card">
         <button class="btn-danger logout" onclick="logout()">Log out</button>
 
-        <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
+        <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
         <p class="subtitle">User: <span id="displayUsername"></span></p>
 
         <div class="coffee-counter">
@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v32-beer-icons-renamed */
+    /* BUILD: v33-beer-mode-fixed */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -1005,6 +1005,60 @@ if (error) {
     window.addEventListener("resize", handlePlotResize);
     window.addEventListener("orientationchange", handlePlotResize);
 
+    // Beer mode Easter egg: triple-tap/click the logo to toggle
+    let beerTapCount = 0;
+    let beerTapTimer = null;
+    const BEER_MODE_KEY = "beer_mode_enabled";
+
+    const COFFEE_TITLE = "Coffee Tracker";
+    const BEER_TITLE = "Beer mode";
+
+    const COFFEE_ICON_192 = "icons/icon-192.png";
+    const COFFEE_ICON_512 = "icons/icon-512.png";
+    const BEER_ICON_192 = "icons/icon_beermode_192.png";
+    const BEER_ICON_512 = "icons/icon_beermode_512.png";
+
+    function applyBeerMode(enabled) {
+      const titles = document.querySelectorAll(".app-title");
+      const logos = document.querySelectorAll(".app-logo");
+
+      titles.forEach(t => t.textContent = enabled ? BEER_TITLE : COFFEE_TITLE);
+
+      logos.forEach(img => {
+        const cur = (img.getAttribute("src") || "").toLowerCase();
+        const use512 = cur.includes("512");
+        img.setAttribute("src", enabled ? (use512 ? BEER_ICON_512 : BEER_ICON_192)
+                                        : (use512 ? COFFEE_ICON_512 : COFFEE_ICON_192));
+        img.style.cursor = "pointer";
+      });
+
+      document.body.classList.toggle("beer-mode", !!enabled);
+      localStorage.setItem(BEER_MODE_KEY, enabled ? "1" : "0");
+
+      if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
+    }
+
+    function toggleBeerModeTap() {
+      beerTapCount += 1;
+      if (beerTapTimer) clearTimeout(beerTapTimer);
+
+      // Slightly longer window for mobile tapping
+      beerTapTimer = setTimeout(() => { beerTapCount = 0; }, 1200);
+
+      if (beerTapCount >= 3) {
+        beerTapCount = 0;
+        const enabled = localStorage.getItem(BEER_MODE_KEY) === "1";
+        applyBeerMode(!enabled);
+      }
+    }
+
+    function bindBeerModeLogoHandlers() {
+      document.querySelectorAll(".app-logo").forEach(img => {
+        img.addEventListener("click", toggleBeerModeTap);
+        img.addEventListener("touchend", (e) => { e.preventDefault(); toggleBeerModeTap(); }, { passive: false });
+      });
+    }
+
 
   window.onload = () => {
       // Admin page must work even if the Supabase CDN is blocked/offline
@@ -1015,7 +1069,7 @@ if (error) {
       }
 
       
-      // Apply Beer mode if enabled
+      bindBeerModeLogoHandlers();
       applyBeerMode(localStorage.getItem(BEER_MODE_KEY) === "1");
 // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
