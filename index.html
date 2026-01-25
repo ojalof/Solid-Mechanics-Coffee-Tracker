@@ -237,7 +237,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <div class="muted" id="todayLabel">Coffees today</div>
           <div class="count" id="todayCount">0</div>
           <button class="coffee-btn" id="addDrinkBtn" onclick="addCoffee()">+ Add Coffee</button>
-          <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled>− Remove last coffee</button>
+          <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled id="removeBtn">− Remove last coffee</button>
           <button class="btn-primary" style="margin-top:12px;" id="statsBtn" onclick="showStats()">View Stats</button>
           <button class="btn-primary" style="margin-top:10px;" id="plotBtn" onclick="showPlot()">View Caffeine Plot</button>
         </div>
@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v41-default-coffee-on-login */
+    /* BUILD: v42b-beer-ui-fixes-login-coffee */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -381,7 +381,11 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const addBtn = el("addDrinkBtn");
       if (addBtn) addBtn.textContent = beer ? "+ Add Beer" : "+ Add Coffee";
 
-      const histHeader = el("historyHeader");
+      
+
+      const removeBtn = el("removeBtn");
+      if (removeBtn) removeBtn.textContent = beer ? "– Remove last beer" : "– Remove last coffee";
+const histHeader = el("historyHeader");
       if (histHeader) histHeader.textContent = beer ? "Recent beers" : "Recent coffees";
 
       const lbHeader = el("leaderboardHeader");
@@ -428,6 +432,10 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     function show(which) {
       hideAll();
+      if (which === "login") {
+        applyBeerMode(false);
+        refreshModeUI();
+      }
       if (which === "app") el("app")?.classList.remove("hidden");
       else el(which)?.classList.remove("hidden");
     }
@@ -484,7 +492,9 @@ const raw = el("username")?.value ?? "";
     function logout() {
       localStorage.removeItem("coffee_username");
       currentUsername = null;
-      hidePlot();
+      if (typeof hidePlot === "function") hidePlot();
+      applyBeerMode(false);
+      refreshModeUI();
       show("login");
     }
 
@@ -543,7 +553,7 @@ loadData();
       const last = (data || [])[0];
       if (!last) return;
 
-      const ok = confirm("Remove your most recent coffee from today?");
+      const ok = confirm("Remove your most recent " + (isBeerMode() ? "beer" : "coffee") + " from today?");
       if (!ok) return;
 
       const del = await supabaseClient
@@ -594,7 +604,7 @@ const history = (data || []).slice(0, 50).map(r => {
       }).join("");
 
       el("history").innerHTML =
-        history || `<p class="muted" style="text-align:center; margin-top:10px;">No coffees yet today.</p>`;
+        history || `<p class="muted" style="text-align:center; margin-top:10px;">No ${getDrinkNamePlural()} yet today.</p>`;
 
       await loadLeaderboard();
     }
@@ -843,13 +853,10 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups)
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
-• Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups)
-
 Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
