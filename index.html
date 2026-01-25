@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v36-fix-beer-counts */
+    /* BUILD: v38-beer-rpc-fix */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -489,7 +489,14 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       el("displayUsername").textContent = currentUsername;
       show("app");
       refreshModeUI();
-      loadData();
+      
+      // Reload data immediately so Beer/Coffee mode switches without refresh
+      try {
+        if (!el("app")?.classList.contains("hidden") && currentUsername) {
+          loadData();
+        }
+      } catch (e) {}
+loadData();
     }
 
     async function addCoffee() {
@@ -655,7 +662,7 @@ const history = (data || []).slice(0, 50).map(r => {
         }).join("");
 
         el("leaderboard").innerHTML =
-          htmlOut || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
+          htmlOut || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
         return;
       }
 // Try RPC first; fall back to JS aggregation if RPC isn't installed.
@@ -668,7 +675,7 @@ const history = (data || []).slice(0, 50).map(r => {
 
       if (!rows) {
         const { data, error } = await supabaseClient
-          .from("coffees_by_username")
+          .from(getActiveTable())
           .select("username")
           .gte("timestamp", startDate.toISOString());
 
@@ -693,7 +700,7 @@ const history = (data || []).slice(0, 50).map(r => {
       }).join("");
 
       el("leaderboard").innerHTML =
-        html || `<p class="muted" style="text-align:center;">No coffees recorded yet.</p>`;
+        html || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
     }
 
     function hideStats() {
