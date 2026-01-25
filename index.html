@@ -1125,7 +1125,7 @@ if (error) {
       // Slightly longer window for mobile tapping
       beerTapTimer = setTimeout(() => { beerTapCount = 0; }, 1200);
 
-      if (beerTapCount >= 3) {
+      if (beerTapCount >= 5) {
         beerTapCount = 0;
         const enabled = localStorage.getItem(BEER_MODE_KEY) === "1";
         applyBeerMode(!enabled);
