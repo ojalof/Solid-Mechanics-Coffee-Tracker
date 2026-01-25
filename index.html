@@ -129,6 +129,11 @@
       #caffeineCanvas { height: 70vh; max-height: 420px; min-height: 260px; }
     }
 
+
+    /* Beer mode Easter egg */
+    body.beer-mode { background: linear-gradient(135deg, #f6ad55 0%, #dd6b20 100%); }
+    body.beer-mode .btn-primary { background: #dd6b20; }
+    body.beer-mode .count { color: #dd6b20; }
 </style>
 </head>
 
@@ -137,7 +142,7 @@
 
     <!-- SETUP (admin only: add ?admin=1) -->
     <div id="setup" class="card hidden">
-      <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
       <p class="subtitle">Admin setup (hidden)</p>
       <p class="muted">
         This page is only shown when you open the app with <code>?admin=1</code>.
@@ -207,7 +212,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     <!-- LOGIN (visible by default to avoid blank screen if JS fails) -->
     <div id="login" class="card">
-      <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
+      <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
       <p class="subtitle">Username-only (no password)</p>
 
       <h2>Enter username</h2>
@@ -225,7 +230,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       <div class="card">
         <button class="btn-danger logout" onclick="logout()">Log out</button>
 
-        <h1 class="brand"><img class="logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title">Coffee Tracker</span></h1>
+        <h1 class="brand"><img class="logo app-logo" style="cursor:pointer;" onclick="toggleBeerModeTap()" src="icons/icon-192.png" alt="App logo"><span class="brand-title">Coffee Tracker</span></h1>
         <p class="subtitle">User: <span id="displayUsername"></span></p>
 
         <div class="coffee-counter">
@@ -266,7 +271,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       <div id="plotCard" class="card hidden">
         <button class="btn-danger logout" onclick="hidePlot()">Close</button>
-        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine in blood over time (today)</h2>
+        <h2 style="text-align:center; margin-top:6px;">📈 Caffeine over time (today)</h2>
         <p class="muted" style="text-align:center; margin-top:6px;">
           Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. Includes residual caffeine from previous intake.
 X-axis is hours of the day (0–24).
@@ -282,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v30-plot-threshold-150mg */
+    /* BUILD: v31-beer-mode-triple-tap */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -777,13 +782,10 @@ const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).pa
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
-• Enough to kill: ${Math.floor(solidMechanicsTotal/4.8)?? "?"} cats (Lethal dose 4.8 cups) 💀
 Tracking since: ${startStr} (${daysTracked} days)
 Average per day: ${avgPerDay.toFixed(1)}
 Max in a day: ${maxInDay}
 Today: ${todayCount}
-• Enough to kill: ${(todayCount/4.8)?? "?"} cats (Lethal dose 4.8 cups) 💀
-
 Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
 
 Caffeine (70 mg/cup):
@@ -955,7 +957,7 @@ if (error) {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = "rgba(245, 101, 101, 0.9)";
-        ctx.fillText("Minimum recommended caffeine level", x0 + 6, Math.max(y1 + 12, yThr - 6));
+        ctx.fillText("150 mg threshold", x0 + 6, Math.max(y1 + 12, yThr - 6));
       }
 
       // Line
@@ -1012,7 +1014,10 @@ if (error) {
         return;
       }
 
-      // Register service worker (PWA)
+      
+      // Apply Beer mode if enabled
+      applyBeerMode(localStorage.getItem(BEER_MODE_KEY) === "1");
+// Register service worker (PWA)
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js").catch(console.error);
       }
