@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v38-beer-rpc-fix */
+    /* BUILD: v41-default-coffee-on-login */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -465,7 +465,10 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     }
 
     function doLogin() {
-      const raw = el("username")?.value ?? "";
+      // Always start in Coffee mode on login
+      applyBeerMode(false);
+      refreshModeUI();
+const raw = el("username")?.value ?? "";
       const normalized = raw.trim();
 
       if (!validUsername(normalized)) {
@@ -669,7 +672,8 @@ const history = (data || []).slice(0, 50).map(r => {
       let rows = null;
 
       try {
-        const { data, error } = await supabaseClient.rpc("leaderboard_username_since", { ts: startDate.toISOString() });
+        const fn = isBeerMode() ? "leaderboard_beer_since" : "leaderboard_username_since";
+        const { data, error } = await supabaseClient.rpc(fn, { ts: startDate.toISOString() });
         if (!error) rows = data;
       } catch (e) {}
 
@@ -1093,7 +1097,15 @@ if (error) {
       localStorage.setItem(BEER_MODE_KEY, enabled ? "1" : "0");
 
       refreshModeUI();
-if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
+
+      // Reload counts/history/leaderboard immediately when switching mode
+      try {
+        if (!el("app")?.classList.contains("hidden") && currentUsername && supabaseClient) {
+          loadData();
+        }
+      } catch (e) {}
+
+      if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
     }
 
     function toggleBeerModeTap() {
@@ -1128,7 +1140,7 @@ if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
 
       
       bindBeerModeLogoHandlers();
-      applyBeerMode(localStorage.getItem(BEER_MODE_KEY) === "1");
+      applyBeerMode(false);
       refreshModeUI();
 // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
