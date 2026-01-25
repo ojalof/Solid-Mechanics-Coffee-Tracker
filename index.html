@@ -234,15 +234,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         <p class="subtitle">User: <span id="displayUsername"></span></p>
 
         <div class="coffee-counter">
-          <div class="muted">Coffees today</div>
+          <div class="muted" id="todayLabel">Coffees today</div>
           <div class="count" id="todayCount">0</div>
-          <button class="coffee-btn" onclick="addCoffee()">+ Add Coffee</button>
+          <button class="coffee-btn" id="addDrinkBtn" onclick="addCoffee()">+ Add Coffee</button>
           <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled>− Remove last coffee</button>
-          <button class="btn-primary" style="margin-top:12px;" onclick="showStats()">View Stats</button>
-          <button class="btn-primary" style="margin-top:10px;" onclick="showPlot()">View Caffeine Plot</button>
+          <button class="btn-primary" style="margin-top:12px;" id="statsBtn" onclick="showStats()">View Stats</button>
+          <button class="btn-primary" style="margin-top:10px;" id="plotBtn" onclick="showPlot()">View Caffeine Plot</button>
         </div>
 
-        <h2 style="margin-top:22px;">Recent coffees</h2>
+        <h2 style="margin-top:22px;" id="historyHeader">Recent coffees</h2>
         <div id="history"></div>
 
       <div id="statsCard" class="card hidden">
@@ -257,7 +257,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       </div>
 
       <div class="card">
-        <h2>🏆 Leaderboard</h2>
+        <h2 id="leaderboardHeader">🏆 Leaderboard</h2>
         <div class="tabs">
           <div class="tab active" data-view="today" onclick="switchLeaderboard(event)">Today</div>
           <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
@@ -287,7 +287,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v33-beer-mode-fixed */
+    /* BUILD: v34-beer-mode-tracks-beers */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -355,6 +355,51 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     let currentUsername = null;
     let currentLeaderboardView = "today";
+
+    function isBeerMode() {
+      return localStorage.getItem(BEER_MODE_KEY) === "1";
+    }
+
+    function getActiveTable() {
+      return isBeerMode() ? "beers_by_username" : "coffees_by_username";
+    }
+
+    function getDrinkNamePlural() {
+      return isBeerMode() ? "beers" : "coffees";
+    }
+
+    function getDrinkEmoji() {
+      return isBeerMode() ? "🍺" : "☕";
+    }
+
+    function refreshModeUI() {
+      const beer = isBeerMode();
+
+      const todayLabel = el("todayLabel");
+      if (todayLabel) todayLabel.textContent = beer ? "Beers today" : "Coffees today";
+
+      const addBtn = el("addDrinkBtn");
+      if (addBtn) addBtn.textContent = beer ? "+ Add Beer" : "+ Add Coffee";
+
+      const histHeader = el("historyHeader");
+      if (histHeader) histHeader.textContent = beer ? "Recent beers" : "Recent coffees";
+
+      const lbHeader = el("leaderboardHeader");
+      if (lbHeader) lbHeader.textContent = beer ? "🍺 Beerboard" : "🏆 Leaderboard";
+
+      // Stats + caffeine plot are coffee-specific; hide in Beer mode.
+      const statsBtn = el("statsBtn");
+      const plotBtn  = el("plotBtn");
+      if (statsBtn) statsBtn.style.display = beer ? "none" : "";
+      if (plotBtn)  plotBtn.style.display  = beer ? "none" : "";
+
+      // If beer mode is on, also hide any open plot/stats cards to avoid confusion
+      if (beer) {
+        if (typeof hideStats === "function") hideStats();
+        if (typeof hidePlot === "function") hidePlot();
+      }
+    }
+
 
     const CAFFEINE_MG_PER_CUP = 70; // mg per coffee
     const NOCCO_MG_PER_SERVING = 180; // mg per serving
@@ -439,12 +484,13 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     function showApp() {
       el("displayUsername").textContent = currentUsername;
       show("app");
+      refreshModeUI();
       loadData();
     }
 
     async function addCoffee() {
       const { error } = await supabaseClient
-        .from("coffees_by_username")
+        .from(getActiveTable())
         .insert([{ username: currentUsername }]);
 
       if (error) {
@@ -467,7 +513,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const lookback = new Date(today.getTime() - PLOT_LOOKBACK_HOURS * 60 * 60 * 1000);
 
       const { data, error } = await supabaseClient
-        .from("coffees_by_username")
+        .from(getActiveTable())
         .select("id,timestamp")
         .eq("username", currentUsername)
         .gte("timestamp", lookback.toISOString())
@@ -487,7 +533,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       if (!ok) return;
 
       const del = await supabaseClient
-        .from("coffees_by_username")
+        .from(getActiveTable())
         .delete({ returning: "minimal" })
         .eq("id", last.id);
 
@@ -506,7 +552,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       today.setHours(0,0,0,0);
 
       const { data, error } = await supabaseClient
-        .from("coffees_by_username")
+        .from("" + getActiveTable() + r"")
         .select("id,timestamp")
         .eq("username", currentUsername)
         .gte("timestamp", today.toISOString())
@@ -530,7 +576,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       }
 const history = (data || []).slice(0, 50).map(r => {
         const t = new Date(r.timestamp).toLocaleTimeString();
-        return `<div class="history-item"><span>☕</span><span>${t}</span></div>`;
+        return `<div class="history-item"><span>${getDrinkEmoji()}</span><span>${t}</span></div>`;
       }).join("");
 
       el("history").innerHTML =
@@ -1035,7 +1081,8 @@ if (error) {
       document.body.classList.toggle("beer-mode", !!enabled);
       localStorage.setItem(BEER_MODE_KEY, enabled ? "1" : "0");
 
-      if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
+      refreshModeUI();
+if (typeof handlePlotResize === "function") setTimeout(handlePlotResize, 0);
     }
 
     function toggleBeerModeTap() {
@@ -1071,6 +1118,7 @@ if (error) {
       
       bindBeerModeLogoHandlers();
       applyBeerMode(localStorage.getItem(BEER_MODE_KEY) === "1");
+      refreshModeUI();
 // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js").catch(console.error);
