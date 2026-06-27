@@ -129,12 +129,65 @@
       #caffeineCanvas { height: 70vh; max-height: 420px; min-height: 260px; }
     }
 
-
     /* Beer mode Easter egg */
     body.beer-mode { background: linear-gradient(135deg, #f6ad55 0%, #dd6b20 100%); }
     body.beer-mode .btn-primary { background: #dd6b20; }
     body.beer-mode .count { color: #dd6b20; }
-</style>
+    body.beer-mode .tab.active { background: #dd6b20; }
+    body.beer-mode .leaderboard-item.me { background: #dd6b20; }
+
+    /* Hållfens lagrekord styles */
+    .lagrekord-day {
+      margin-bottom: 16px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .lagrekord-day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(90deg, #f6ad55, #dd6b20);
+      color: #fff;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .lagrekord-day-header .day-total {
+      font-size: 1.5em;
+      font-weight: 800;
+    }
+    .lagrekord-day-header .day-date {
+      font-size: 13px;
+      opacity: 0.85;
+      font-weight: 500;
+    }
+    .lagrekord-user-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: #fffaf5;
+      border-bottom: 1px solid #f6e8d8;
+      font-size: 14px;
+    }
+    .lagrekord-user-row:last-child { border-bottom: none; }
+    .lagrekord-user-row.is-me {
+      background: #fff3e0;
+      font-weight: 600;
+    }
+    .lagrekord-user-name { color: #4a3222; }
+    .lagrekord-user-beers { color: #dd6b20; font-weight: 700; }
+    .lagrekord-medal {
+      font-size: 1.3em;
+      margin-right: 6px;
+    }
+    #lagrekordEmpty {
+      text-align: center;
+      color: #718096;
+      padding: 20px 0;
+    }
+  </style>
 </head>
 
 <body>
@@ -258,12 +311,13 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       <div class="card">
         <h2 id="leaderboardHeader">🏆 Leaderboard</h2>
-        <div class="tabs">
+        <div class="tabs" id="leaderboardTabs">
           <div class="tab active" data-view="today" onclick="switchLeaderboard(event)">Today</div>
           <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
           <div class="tab" data-view="month" onclick="switchLeaderboard(event)">This Month</div>
           <div class="tab" data-view="all" onclick="switchLeaderboard(event)">All Time</div>
           <div class="tab" data-view="maxday" onclick="switchLeaderboard(event)"><span id="maxdayTabText">Max/day</span></div>
+          <div class="tab beer-only-tab hidden" data-view="lagrekord" onclick="switchLeaderboard(event)">🏅 Hållfens lagrekord</div>
         </div>
         <div id="leaderboard"></div>
       </div>
@@ -287,7 +341,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v42b-beer-ui-fixes-login-coffee */
+    /* BUILD: v43-hallfens-lagrekord */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -381,21 +435,32 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const addBtn = el("addDrinkBtn");
       if (addBtn) addBtn.textContent = beer ? "+ Add Beer" : "+ Add Coffee";
 
-      
-
       const removeBtn = el("removeBtn");
       if (removeBtn) removeBtn.textContent = beer ? "– Remove last beer" : "– Remove last coffee";
-const histHeader = el("historyHeader");
+
+      const histHeader = el("historyHeader");
       if (histHeader) histHeader.textContent = beer ? "Recent beers" : "Recent coffees";
 
       const lbHeader = el("leaderboardHeader");
       if (lbHeader) lbHeader.textContent = beer ? "🍺 Beerboard" : "🏆 Leaderboard";
 
-      
-
       const maxdayTab = document.getElementById("maxdayTabText");
       if (maxdayTab) maxdayTab.textContent = beer ? "Max/day" : "Max/day";
-// Stats + caffeine plot are coffee-specific; hide in Beer mode.
+
+      // Show/hide the Hållfens lagrekord tab only in beer mode
+      document.querySelectorAll(".beer-only-tab").forEach(t => {
+        t.classList.toggle("hidden", !beer);
+      });
+
+      // If switching away from beer mode while on lagrekord tab, fall back to today
+      if (!beer && currentLeaderboardView === "lagrekord") {
+        currentLeaderboardView = "today";
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        const todayTab = document.querySelector('.tab[data-view="today"]');
+        if (todayTab) todayTab.classList.add("active");
+      }
+
+      // Stats + caffeine plot are coffee-specific; hide in Beer mode.
       const statsBtn = el("statsBtn");
       const plotBtn  = el("plotBtn");
       if (statsBtn) statsBtn.style.display = beer ? "none" : "";
@@ -476,7 +541,7 @@ const histHeader = el("historyHeader");
       // Always start in Coffee mode on login
       applyBeerMode(false);
       refreshModeUI();
-const raw = el("username")?.value ?? "";
+      const raw = el("username")?.value ?? "";
       const normalized = raw.trim();
 
       if (!validUsername(normalized)) {
@@ -509,7 +574,7 @@ const raw = el("username")?.value ?? "";
           loadData();
         }
       } catch (e) {}
-loadData();
+      loadData();
     }
 
     async function addCoffee() {
@@ -541,7 +606,7 @@ loadData();
         .select("id,timestamp")
         .eq("username", currentUsername)
         .gte("timestamp", lookback.toISOString())
-.order("timestamp", { ascending: false })
+        .order("timestamp", { ascending: false })
         .limit(1);
 
       if (error) {
@@ -598,7 +663,7 @@ loadData();
         rmBtn.disabled = n < 1;
         rmBtn.style.opacity = n < 1 ? "0.5" : "1";
       }
-const history = (data || []).slice(0, 50).map(r => {
+      const history = (data || []).slice(0, 50).map(r => {
         const t = new Date(r.timestamp).toLocaleTimeString();
         return `<div class="history-item"><span>${getDrinkEmoji()}</span><span>${t}</span></div>`;
       }).join("");
@@ -617,6 +682,12 @@ const history = (data || []).slice(0, 50).map(r => {
     }
 
     async function loadLeaderboard() {
+      // Route to Hållfens lagrekord if that tab is active
+      if (currentLeaderboardView === "lagrekord") {
+        await loadLagrekord();
+        return;
+      }
+
       let startDate = new Date();
       switch (currentLeaderboardView) {
         case "today":
@@ -628,8 +699,6 @@ const history = (data || []).slice(0, 50).map(r => {
         case "all":
           startDate = new Date("2000-01-01"); break;
       }
-
-      
 
       // Special leaderboard: maximum drinks in a single day per user (all-time)
       if (currentLeaderboardView === "maxday") {
@@ -678,7 +747,8 @@ const history = (data || []).slice(0, 50).map(r => {
           htmlOut || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
         return;
       }
-// Try RPC first; fall back to JS aggregation if RPC isn't installed.
+
+      // Try RPC first; fall back to JS aggregation if RPC isn't installed.
       let rows = null;
 
       try {
@@ -716,6 +786,77 @@ const history = (data || []).slice(0, 50).map(r => {
       el("leaderboard").innerHTML =
         html || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
     }
+
+    // ── Hållfens lagrekord ──────────────────────────────────────────────────────
+    // Ranks calendar days by total team beers, with per-user breakdown per day.
+    async function loadLagrekord() {
+      el("leaderboard").innerHTML = `<p class="muted" style="text-align:center; padding:16px 0;">Laddar rekord…</p>`;
+
+      const { data, error } = await supabaseClient
+        .from(getActiveTable())
+        .select("username,timestamp");
+
+      if (error) {
+        console.error("lagrekord:", error);
+        el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Kunde inte ladda rekord.</p>`;
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        el("leaderboard").innerHTML = `<p id="lagrekordEmpty">Inga öl registrerade än. Börja dricka! 🍺</p>`;
+        return;
+      }
+
+      // Aggregate: dayKey -> { total, users: { username -> count } }
+      const byDay = {};
+      for (const r of data) {
+        const d = new Date(r.timestamp);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!byDay[dayKey]) byDay[dayKey] = { total: 0, users: {} };
+        byDay[dayKey].total += 1;
+        byDay[dayKey].users[r.username] = (byDay[dayKey].users[r.username] || 0) + 1;
+      }
+
+      // Sort days by total descending, then date descending as tiebreaker
+      const sortedDays = Object.entries(byDay)
+        .sort((a, b) => b[1].total - a[1].total || b[0].localeCompare(a[0]));
+
+      const medals = ["🥇", "🥈", "🥉"];
+
+      const html = sortedDays.slice(0, 20).map(([dayKey, info], idx) => {
+        // Format date nicely
+        const [yr, mo, dy] = dayKey.split("-");
+        const dateObj = new Date(Number(yr), Number(mo) - 1, Number(dy));
+        const dayName = dateObj.toLocaleDateString("sv-SE", { weekday: "long" });
+        const dateStr = dateObj.toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric" });
+        const capitalDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+
+        // Medal for top 3
+        const medal = medals[idx] ?? `${idx + 1}.`;
+
+        // Sort users by beer count descending
+        const userRows = Object.entries(info.users)
+          .sort((a, b) => b[1] - a[1])
+          .map(([uname, count]) => {
+            const isMe = uname === currentUsername;
+            return `<div class="lagrekord-user-row${isMe ? " is-me" : ""}">
+              <span class="lagrekord-user-name">${isMe ? "👤 " : ""}${uname}${isMe ? " (du)" : ""}</span>
+              <span class="lagrekord-user-beers">${count} 🍺</span>
+            </div>`;
+          }).join("");
+
+        return `<div class="lagrekord-day">
+          <div class="lagrekord-day-header">
+            <span><span class="lagrekord-medal">${medal}</span>${capitalDay}<span class="day-date" style="margin-left:8px;">${dateStr}</span></span>
+            <span class="day-total">${info.total} 🍺</span>
+          </div>
+          ${userRows}
+        </div>`;
+      }).join("");
+
+      el("leaderboard").innerHTML = html;
+    }
+    // ───────────────────────────────────────────────────────────────────────────
 
     function hideStats() {
       el("statsCard")?.classList.add("hidden");
@@ -756,7 +897,7 @@ Error: ${error.message || error}`;
       } catch (e) {
         // ignore; keep null
       }
-if (total === 0) {
+      if (total === 0) {
         el("statsText").textContent = `Total coffees: 0
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
 Cat treats (fun): Today 0, Solid Mechanics ${solidMechanicsTotal == null ? "?" : (solidMechanicsTotal * CAT_TREATS_PER_COFFEE)}
@@ -805,10 +946,6 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`;
       const todayCount = countsByDay[todayKey] || 0;
 
-      
-
-      
-
       // Coffees per hour (today): time since first coffee today (min 0.25 h)
       let coffeesPerHourToday = 0;
       if (todayCount > 0) {
@@ -820,8 +957,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
         const hoursSinceFirst = Math.max(0.25, (now.getTime() - firstTodayMs) / (60 * 60 * 1000));
         coffeesPerHourToday = todayCount / hoursSinceFirst;
       }
-// Estimated caffeine remaining in body now (simple half-life decay model)
-      // Assumptions: instantaneous absorption; elimination follows exponential decay with half-life.
+
+      // Estimated caffeine remaining in body now (simple half-life decay model)
       const nowMs = now.getTime();
       const halfLifeMs = CAFFEINE_HALF_LIFE_HOURS * 60 * 60 * 1000;
       const ln2 = Math.LN2;
@@ -838,7 +975,6 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const noccoEqAvg = (avgPerDay * CAFFEINE_MG_PER_CUP) / NOCCO_MG_PER_SERVING;
       const noccoEqRemaining = caffeineRemainingMg / NOCCO_MG_PER_SERVING;
 
-
       // Time until caffeine is ~0% (mathematically never reaches 0, so we use a tiny threshold)
       const ZERO_THRESHOLD_MG = 1; // treat <1 mg as ~0%
       let timeToZeroHours = 0;
@@ -849,7 +985,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const timeToZeroH = Math.floor(timeToZeroMins / 60);
       const timeToZeroMin = timeToZeroMins % 60;
       const timeToZeroStr = `${timeToZeroH}h ${String(timeToZeroMin).padStart(2,'0')}m`;
-const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
+
+      const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
       
       el("statsText").textContent = `Total coffees: ${total}
 Solid Mechanics total: ${solidMechanicsTotal ?? "?"}
@@ -872,6 +1009,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 • NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings
 • Time until ~0% (<1 mg): ${timeToZeroStr}`;
     }
+
     let lastPlotTimestampsMs = [];
     let lastPlotNote = "";
     let plotRedrawTimer = null;
@@ -887,7 +1025,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 
       // After the card becomes visible, redraw once layout has settled (mobile)
       setTimeout(() => handlePlotResize(), 0);
-if (!supabaseClient || !currentUsername) {
+
+      if (!supabaseClient || !currentUsername) {
         lastPlotTimestampsMs = [];
         lastPlotNote = "Not logged in.";
         drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
@@ -902,7 +1041,8 @@ if (!supabaseClient || !currentUsername) {
         .select("timestamp")
         .eq("username", currentUsername)
         .order("timestamp", { ascending: true });
-if (error) {
+
+      if (error) {
         console.error("plot query:", error);
         lastPlotTimestampsMs = [];
         lastPlotNote = "Could not load data.";
@@ -914,7 +1054,7 @@ if (error) {
       lastPlotTimestampsMs = coffeeMs;
       lastPlotNote = coffeeMs.length ? "" : "No coffees logged today.";
       drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
-}
+    }
 
     function drawCaffeinePlot(coffeeTimestampsMs, noteText) {
       const canvas = el("caffeineCanvas");
@@ -983,7 +1123,7 @@ if (error) {
       ctx.stroke();
 
       // Grid + labels
-      ctx.font = (smallScreen ? "11px" : "12px") + " -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif";
+      ctx.font = (smallScreen ? "11px" : "12px") + " -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
       // X ticks: fewer labels on small screens
       const xStep = smallScreen ? 6 : 3;
@@ -1140,7 +1280,7 @@ if (error) {
     }
 
 
-  window.onload = () => {
+    window.onload = () => {
       // Admin page must work even if the Supabase CDN is blocked/offline
       const params = new URLSearchParams(window.location.search);
       if (params.get("admin") === "1") {
@@ -1152,7 +1292,8 @@ if (error) {
       bindBeerModeLogoHandlers();
       applyBeerMode(false);
       refreshModeUI();
-// Register service worker (PWA)
+
+      // Register service worker (PWA)
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js").catch(console.error);
       }
@@ -1162,7 +1303,7 @@ if (error) {
         return;
       }
 
-if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
+      if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR_SUPABASE_URL_HERE") ||
           !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("PASTE_YOUR_SUPABASE_ANON_KEY_HERE")) {
         setMsg("loginMsg", "App not configured. The host must set SUPABASE_URL and SUPABASE_ANON_KEY in index.html.", true);
         // login is visible by default
