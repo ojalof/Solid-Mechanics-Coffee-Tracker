@@ -862,15 +862,35 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       el("statsCard")?.classList.add("hidden");
     }
 
+    // Supabase/PostgREST projects commonly cap a single SELECT response at 1000 rows.
+    // Fetch stats data page-by-page so users with >1000 coffees are counted correctly.
+    async function fetchAllCoffeeTimestampsForUser(username) {
+      const PAGE_SIZE = 1000;
+      const allRows = [];
+
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabaseClient
+          .from("coffees_by_username")
+          .select("timestamp")
+          .eq("username", username)
+          .order("timestamp", { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) return { data: null, error };
+
+        const page = data || [];
+        allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+
+      return { data: allRows, error: null };
+    }
+
     async function showStats() {
       el("statsText").textContent = "Loading stats…";
       el("statsCard")?.classList.remove("hidden");
 
-      const { data, error } = await supabaseClient
-        .from("coffees_by_username")
-        .select("timestamp")
-        .eq("username", currentUsername)
-        .order("timestamp", { ascending: true });
+      const { data, error } = await fetchAllCoffeeTimestampsForUser(currentUsername);
 
       if (error) {
         console.error("stats query:", error);
