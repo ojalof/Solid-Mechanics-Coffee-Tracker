@@ -187,6 +187,13 @@
       color: #718096;
       padding: 20px 0;
     }
+
+    /* Coffee Radar */
+    .radar-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .radar-actions button { flex:1 1 120px; }
+    .radar-user { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f7fafc; border-radius:10px; margin-top:8px; }
+    .radar-user.me { background:#edf2ff; font-weight:700; }
+    .radar-status { font-size:13px; color:#718096; }
   </style>
 </head>
 
@@ -212,6 +219,25 @@ create table if not exists public.coffees_by_username (
   username text not null,
   timestamp timestamptz not null default now()
 );
+
+-- Coffee Radar: temporary social coffee status
+create table if not exists public.coffee_radar (
+  username text primary key,
+  coffee_at timestamptz not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.coffee_radar enable row level security;
+drop policy if exists "read coffee radar" on public.coffee_radar;
+drop policy if exists "insert coffee radar" on public.coffee_radar;
+drop policy if exists "update coffee radar" on public.coffee_radar;
+drop policy if exists "delete coffee radar" on public.coffee_radar;
+create policy "read coffee radar" on public.coffee_radar for select using (true);
+create policy "insert coffee radar" on public.coffee_radar for insert with check (true);
+create policy "update coffee radar" on public.coffee_radar for update using (true) with check (true);
+create policy "delete coffee radar" on public.coffee_radar for delete using (true);
+
 
 create index if not exists coffees_by_username_user_ts_idx
   on public.coffees_by_username (username, timestamp desc);
@@ -309,6 +335,24 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       </div>
 
+      <div class="card" id="coffeeRadarCard">
+        <h2>📡 Coffee Radar</h2>
+        <p class="muted">Se om någon annan är sugen på kaffe.</p>
+        <div id="radarInactive">
+          <button class="btn-primary" onclick="showRadarChoices()">☕ Jag är kaffesugen</button>
+        </div>
+        <div id="radarChoices" class="hidden">
+          <div class="radar-actions">
+            <button class="btn-secondary" onclick="activateCoffeeRadar(0)">Nu</button>
+            <button class="btn-secondary" onclick="activateCoffeeRadar(10)">Om 10 min</button>
+            <button class="btn-secondary" onclick="activateCoffeeRadar(30)">Om 30 min</button>
+          </div>
+        </div>
+        <div id="radarMyStatus" class="hidden"></div>
+        <div id="radarUsers" style="margin-top:12px;"></div>
+        <div id="radarMsg" class="msg"></div>
+      </div>
+
       <div class="card">
         <h2 id="leaderboardHeader">🏆 Leaderboard</h2>
         <div class="tabs" id="leaderboardTabs">
@@ -361,6 +405,25 @@ create table if not exists public.coffees_by_username (
   username text not null,
   timestamp timestamptz not null default now()
 );
+
+-- Coffee Radar: temporary social coffee status
+create table if not exists public.coffee_radar (
+  username text primary key,
+  coffee_at timestamptz not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.coffee_radar enable row level security;
+drop policy if exists "read coffee radar" on public.coffee_radar;
+drop policy if exists "insert coffee radar" on public.coffee_radar;
+drop policy if exists "update coffee radar" on public.coffee_radar;
+drop policy if exists "delete coffee radar" on public.coffee_radar;
+create policy "read coffee radar" on public.coffee_radar for select using (true);
+create policy "insert coffee radar" on public.coffee_radar for insert with check (true);
+create policy "update coffee radar" on public.coffee_radar for update using (true) with check (true);
+create policy "delete coffee radar" on public.coffee_radar for delete using (true);
+
 
 create index if not exists coffees_by_username_user_ts_idx
   on public.coffees_by_username (username, timestamp desc);
@@ -461,6 +524,9 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       }
 
       // Stats + caffeine plot are coffee-specific; hide in Beer mode.
+      const radarCard = el("coffeeRadarCard");
+      if (radarCard) radarCard.style.display = beer ? "none" : "";
+
       const statsBtn = el("statsBtn");
       const plotBtn  = el("plotBtn");
       if (statsBtn) statsBtn.style.display = beer ? "none" : "";
@@ -557,6 +623,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     function logout() {
       localStorage.removeItem("coffee_username");
       currentUsername = null;
+      if (coffeeRadarTimer) { clearInterval(coffeeRadarTimer); coffeeRadarTimer = null; }
       if (typeof hidePlot === "function") hidePlot();
       applyBeerMode(false);
       refreshModeUI();
@@ -567,6 +634,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       el("displayUsername").textContent = currentUsername;
       show("app");
       refreshModeUI();
+      startCoffeeRadarPolling();
       
       // Reload data immediately so Beer/Coffee mode switches without refresh
       try {
@@ -635,6 +703,98 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       await loadData();
     }
 
+
+    // -- Coffee Radar -------------------------------------------------------------
+    let coffeeRadarTimer = null;
+
+    function showRadarChoices() {
+      el("radarChoices")?.classList.remove("hidden");
+    }
+
+    function radarTimeLabel(coffeeAt) {
+      const mins = Math.round((new Date(coffeeAt).getTime() - Date.now()) / 60000);
+      if (mins <= 2) return "Nu";
+      if (mins <= 12) return "Om 10 min";
+      return "Om " + mins + " min";
+    }
+
+    async function activateCoffeeRadar(delayMinutes) {
+      if (!currentUsername || !supabaseClient) return;
+      const now = new Date();
+      const coffeeAt = new Date(now.getTime() + delayMinutes * 60000);
+      // Keep the entry visible for 30 minutes after the selected coffee time.
+      const expiresAt = new Date(coffeeAt.getTime() + 30 * 60000);
+      const { error } = await supabaseClient.from("coffee_radar").upsert([{
+        username: currentUsername,
+        coffee_at: coffeeAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+        updated_at: now.toISOString()
+      }], { onConflict: "username" });
+      if (error) {
+        console.error("coffee radar activate:", error);
+        setMsg("radarMsg", "Kunde inte aktivera Coffee Radar. Har du kört den nya SQL-koden?", true);
+        return;
+      }
+      el("radarChoices")?.classList.add("hidden");
+      await loadCoffeeRadar();
+    }
+
+    async function deactivateCoffeeRadar() {
+      if (!currentUsername || !supabaseClient) return;
+      const { error } = await supabaseClient.from("coffee_radar").delete().eq("username", currentUsername);
+      if (error) {
+        console.error("coffee radar deactivate:", error);
+        setMsg("radarMsg", "Kunde inte avsluta Coffee Radar.", true);
+        return;
+      }
+      await loadCoffeeRadar();
+    }
+
+    async function loadCoffeeRadar() {
+      if (!currentUsername || !supabaseClient || isBeerMode()) return;
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabaseClient
+        .from("coffee_radar")
+        .select("username,coffee_at,expires_at")
+        .gt("expires_at", nowIso)
+        .order("coffee_at", { ascending: true });
+
+      if (error) {
+        console.error("coffee radar load:", error);
+        el("radarUsers").innerHTML = '<p class="muted">Coffee Radar är inte konfigurerad ännu.</p>';
+        return;
+      }
+
+      const rows = data || [];
+      const mine = rows.find(r => r.username === currentUsername);
+      const inactive = el("radarInactive");
+      const myStatus = el("radarMyStatus");
+      if (mine) {
+        inactive?.classList.add("hidden");
+        if (myStatus) {
+          myStatus.classList.remove("hidden");
+          myStatus.innerHTML = `<div class="radar-user me"><span>☕ Du är synlig: ${radarTimeLabel(mine.coffee_at)}</span><button class="btn-danger" style="margin:0;" onclick="deactivateCoffeeRadar()">Avsluta</button></div>`;
+        }
+      } else {
+        inactive?.classList.remove("hidden");
+        myStatus?.classList.add("hidden");
+      }
+
+      const others = rows.filter(r => r.username !== currentUsername);
+      el("radarUsers").innerHTML = others.length
+        ? others.map(r => `<div class="radar-user"><span>🟢 ${r.username}</span><span class="radar-status">${radarTimeLabel(r.coffee_at)}</span></div>`).join("")
+        : '<p class="muted" style="text-align:center;">📡 Scannar efter kaffesugna kollegor…</p>';
+      setMsg("radarMsg", "", false);
+    }
+
+    function startCoffeeRadarPolling() {
+      if (coffeeRadarTimer) clearInterval(coffeeRadarTimer);
+      loadCoffeeRadar();
+      coffeeRadarTimer = setInterval(() => {
+        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode()) loadCoffeeRadar();
+      }, 10000);
+    }
+    // ---------------------------------------------------------------------------
 
     async function loadData() {
       const today = new Date();
