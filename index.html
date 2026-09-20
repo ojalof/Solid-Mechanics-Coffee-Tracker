@@ -723,7 +723,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const now = new Date();
       const coffeeAt = new Date(now.getTime() + delayMinutes * 60000);
       // Keep the entry visible for 30 minutes after the selected coffee time.
-      const expiresAt = new Date(coffeeAt.getTime() + 30 * 60000);
+      const expiresAt = new Date(coffeeAt.getTime() + 60 * 60000);
       const { error } = await supabaseClient.from("coffee_radar").upsert([{
         username: currentUsername,
         coffee_at: coffeeAt.toISOString(),
