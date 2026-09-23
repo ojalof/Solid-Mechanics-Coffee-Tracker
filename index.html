@@ -450,7 +450,10 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <p class="muted" style="text-align:center; margin-top:10px;">Rough estimate; absorption and individual variation are ignored.</p>
         </div>
         <div id="activityPlotView" class="hidden">
-          <p class="muted" style="text-align:center; margin-top:6px;">Varje punkt är en registrerad kaffe. X = klockslag, Y = datum. Visar alla användare.</p>
+          <p class="muted" style="text-align:center; margin-top:6px;">Varje punkt är en registrerad kaffe. X = klockslag, Y = datum.</p>
+          <select id="activityUserFocus" onchange="setActivityUserFocus(this.value)" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin:8px 0 12px;">
+            <option value="">Alla användare</option>
+          </select>
           <canvas id="activityCanvas" style="width:100%; height:55vh; max-height:620px; min-height:360px; display:block;"></canvas>
           <p id="activityPlotNote" class="muted" style="text-align:center; margin-top:10px;"></p>
         </div>
@@ -461,7 +464,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v48-plot-mode-activity-map */
+    /* BUILD: v49-activity-map-user-focus */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -1389,6 +1392,24 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     let plotRedrawTimer = null;
     let currentPlotMode = "caffeine";
     let lastActivityRows = [];
+    let activityUserFocus = "";
+
+    function setActivityUserFocus(username) {
+      activityUserFocus = username || "";
+      drawActivityMap(lastActivityRows || []);
+    }
+
+    function refreshActivityUserFocus(rows) {
+      const select = el("activityUserFocus");
+      if (!select) return;
+      const users = [...new Set((rows || []).map(r => r.username).filter(Boolean))]
+        .sort((a,b) => a.localeCompare(b, "sv"));
+      const selected = activityUserFocus;
+      select.innerHTML = '<option value="">Alla användare</option>' +
+        users.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}${u === currentUsername ? " (du)" : ""}</option>`).join("");
+      if (users.includes(selected)) select.value = selected;
+      else activityUserFocus = "";
+    }
 
     function hidePlot() {
       el("plotCard")?.classList.add("hidden");
@@ -1414,9 +1435,14 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
         el("activityPlotNote").textContent = "Kunde inte ladda Coffee Activity Map.";
       } else {
         lastActivityRows = data || [];
+        refreshActivityUserFocus(lastActivityRows);
         el("activityPlotNote").textContent = lastActivityRows.length ? `${lastActivityRows.length} kafferegistreringar visas.` : "Inga kafferegistreringar ännu.";
       }
       drawActivityMap(lastActivityRows);
+      if (activityUserFocus) {
+        const n = lastActivityRows.filter(r => r.username === activityUserFocus).length;
+        el("activityPlotNote").textContent = `${activityUserFocus}: ${n} kaffe markerade. Övriga användare är nedtonade.`;
+      }
     }
 
     function drawActivityMap(rows) {
@@ -1437,12 +1463,16 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const rowH=Math.max(8,(y0-y1)/Math.max(1,days.length));
       const showEvery=Math.max(1,Math.ceil(days.length/12));
       days.forEach((day,i)=>{ const y=y1+(i+.5)*rowH; if(i%showEvery===0 || i===days.length-1){ctx.fillStyle="rgba(0,0,0,.62)";ctx.fillText(day.slice(5),6,y+4);} });
-      ctx.fillStyle="rgba(102,126,234,.62)";
       for(const r of parsed){
         const key=`${r.d.getFullYear()}-${String(r.d.getMonth()+1).padStart(2,'0')}-${String(r.d.getDate()).padStart(2,'0')}`;
         const hour=r.d.getHours()+r.d.getMinutes()/60+r.d.getSeconds()/3600;
         const x=x0+(hour/24)*(x1-x0), y=y1+(dayIndex.get(key)+.5)*rowH;
-        ctx.beginPath();ctx.arc(x,y,Math.max(2,Math.min(4,rowH*.28)),0,Math.PI*2);ctx.fill();
+        const focused = activityUserFocus && r.username === activityUserFocus;
+        ctx.fillStyle = activityUserFocus
+          ? (focused ? "rgba(229,62,62,.95)" : "rgba(160,174,192,.20)")
+          : "rgba(102,126,234,.62)";
+        const radius = focused ? Math.max(3.5,Math.min(5.5,rowH*.36)) : Math.max(2,Math.min(4,rowH*.28));
+        ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
       }
       ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillText("Klockslag",x1-48,y0+32);
     }
