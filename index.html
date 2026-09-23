@@ -455,7 +455,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v46-coffee-connections-community */
+    /* BUILD: v47-coffee-connections-community-sep23 */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -862,7 +862,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       if(!box || !supabaseClient || isBeerMode()) return;
       const [pr,tr]=await Promise.all([
         supabaseClient.from("shared_coffee_participants").select("event_id,username"),
-        supabaseClient.from("coffees_by_username").select("id",{count:"exact",head:true})
+        supabaseClient.from("coffees_by_username").select("id",{count:"exact",head:true}).gte("timestamp", "2026-09-22T22:00:00.000Z")
       ]);
       if(pr.error){ box.innerHTML='<p class="muted">Community-statistik blir tillgänglig när Coffee Connections är konfigurerad.</p>'; return; }
       const events={}; for(const r of pr.data||[]) (events[r.event_id]??=new Set()).add(r.username);
@@ -870,7 +870,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       for(const set of Object.values(events)){ const n=[...set].sort((a,b)=>a.localeCompare(b,"sv")); biggest=Math.max(biggest,n.length); shared+=n.length; n.forEach(x=>people.add(x)); for(let i=0;i<n.length;i++)for(let j=i+1;j<n.length;j++){const k=n[i]+"|||"+n[j];pairs[k]=(pairs[k]||0)+1;} }
       const rows=Object.entries(pairs).map(([k,count])=>{const [a,b]=k.split("|||");return{a,b,count};}).sort((x,y)=>y.count-x.count);
       const total=tr.count||0,pct=total?Math.round(shared/total*100):0,top=rows[0];
-      box.innerHTML=`<div class="connections-public-grid"><div class="connections-stat"><strong>${Object.keys(events).length}</strong><span class="muted">gemensamma fikastunder</span></div><div class="connections-stat"><strong>${rows.length}</strong><span class="muted">unika connections</span></div><div class="connections-stat"><strong>${pct}%</strong><span class="muted">av kaffet dricks tillsammans</span></div><div class="connections-stat"><strong>${people.size}</strong><span class="muted">sociala kaffedrickare</span></div></div><div class="connections-highlight">🔥 <strong>Mest etablerade connection:</strong> ${top?`${escapeHtml(top.a)} + ${escapeHtml(top.b)} — ${top.count} ☕`:"Ingen ännu"}</div><div class="connections-highlight">👥 <strong>Största gemensamma fikan:</strong> ${biggest?`${biggest} personer`:"Ingen ännu"}</div>`;
+      box.innerHTML=`<div class="connections-public-grid"><div class="connections-stat"><strong>${Object.keys(events).length}</strong><span class="muted">gemensamma fikastunder</span></div><div class="connections-stat"><strong>${rows.length}</strong><span class="muted">unika connections</span></div><div class="connections-stat"><strong>${pct}%</strong><span class="muted">av kaffet dricks tillsammans<br><small>sedan 23 sep 2026</small></span></div><div class="connections-stat"><strong>${people.size}</strong><span class="muted">sociala kaffedrickare</span></div></div><div class="connections-highlight">🔥 <strong>Mest etablerade connection:</strong> ${top?`${escapeHtml(top.a)} + ${escapeHtml(top.b)} — ${top.count} ☕`:"Ingen ännu"}</div><div class="connections-highlight">👥 <strong>Största gemensamma fikan:</strong> ${biggest?`${biggest} personer`:"Ingen ännu"}</div>`;
     }
 
     async function loadCoffeeConnections(){
