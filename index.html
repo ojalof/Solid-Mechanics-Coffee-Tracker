@@ -948,7 +948,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const others = rows.filter(r => r.username !== currentUsername);
       el("radarUsers").innerHTML = others.length
         ? others.map(r => `<div class="radar-user"><span>🟢 ${r.username}</span><span class="radar-status">${radarTimeLabel(r.coffee_at)}</span></div>`).join("")
-        : '<p class="muted" style="text-align:center;">📡 Scannar efter kaffesugna kollegor…</p>';
+        : '<p class="muted" style="text-align:center;">📡 Scannar efter kaffesugna bekanta…</p>';
       setMsg("radarMsg", "", false);
     }
 
