@@ -188,6 +188,15 @@
       padding: 20px 0;
     }
 
+    /* Shared Coffee + Coffee Connections */
+    .shared-coffee-btn { background:#805ad5; color:#fff; }
+    .shared-panel { margin-top:12px; padding:14px; background:#f7fafc; border-radius:12px; text-align:left; }
+    .shared-user-row { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid #e2e8f0; }
+    .shared-user-row input { width:auto; margin:0; }
+    .connection-row { display:flex; justify-content:space-between; padding:10px 12px; background:#f7fafc; border-radius:10px; margin-top:8px; }
+    .connections-toggle { background:#edf2f7; color:#2d3748; }
+    .connection-section-title { margin-top:16px; font-weight:700; color:#4a5568; }
+
     /* Coffee Radar */
     .radar-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
     .radar-actions button { flex:1 1 120px; }
@@ -238,6 +247,43 @@ create policy "insert coffee radar" on public.coffee_radar for insert with check
 create policy "update coffee radar" on public.coffee_radar for update using (true) with check (true);
 create policy "delete coffee radar" on public.coffee_radar for delete using (true);
 
+
+-- Shared coffee events
+create table if not exists public.shared_coffee_events (
+  id uuid primary key default gen_random_uuid(),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.shared_coffee_participants (
+  event_id uuid not null references public.shared_coffee_events(id) on delete cascade,
+  username text not null,
+  primary key (event_id, username)
+);
+alter table public.shared_coffee_events enable row level security;
+alter table public.shared_coffee_participants enable row level security;
+drop policy if exists "read shared coffee events" on public.shared_coffee_events;
+drop policy if exists "insert shared coffee events" on public.shared_coffee_events;
+create policy "read shared coffee events" on public.shared_coffee_events for select using (true);
+create policy "insert shared coffee events" on public.shared_coffee_events for insert with check (true);
+drop policy if exists "read shared coffee participants" on public.shared_coffee_participants;
+drop policy if exists "insert shared coffee participants" on public.shared_coffee_participants;
+create policy "read shared coffee participants" on public.shared_coffee_participants for select using (true);
+create policy "insert shared coffee participants" on public.shared_coffee_participants for insert with check (true);
+
+create or replace function public.log_shared_coffee(p_created_by text, p_usernames text[])
+returns uuid language plpgsql security definer set search_path=public as $$
+declare v_event_id uuid; v_names text[]; v_count int;
+begin
+  select array_agg(name order by name), count(*) into v_names, v_count
+  from (select distinct btrim(x) name from unnest(p_usernames) x where btrim(x) <> '') s;
+  if v_count < 2 then raise exception 'At least two unique participants required'; end if;
+  if not (p_created_by = any(v_names)) then raise exception 'Creator must be participant'; end if;
+  insert into public.shared_coffee_events(created_by) values(p_created_by) returning id into v_event_id;
+  insert into public.shared_coffee_participants(event_id,username) select v_event_id, unnest(v_names);
+  insert into public.coffees_by_username(username) select unnest(v_names);
+  return v_event_id;
+end; $$;
+grant execute on function public.log_shared_coffee(text,text[]) to anon, authenticated;
 
 create index if not exists coffees_by_username_user_ts_idx
   on public.coffees_by_username (username, timestamp desc);
@@ -316,6 +362,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <div class="muted" id="todayLabel">Coffees today</div>
           <div class="count" id="todayCount">0</div>
           <button class="coffee-btn" id="addDrinkBtn" onclick="addCoffee()">+ Add Coffee</button>
+          <button class="shared-coffee-btn" id="sharedCoffeeBtn" onclick="openSharedCoffee()">👥 Gemensam kaffe</button>
+          <div id="sharedCoffeePanel" class="shared-panel hidden">
+            <strong>☕ Vilka dricker kaffe tillsammans?</strong>
+            <p class="muted">Du är alltid med. Välj minst en person till.</p>
+            <div id="sharedCoffeeUsers"></div>
+            <button class="btn-secondary" id="logSharedCoffeeBtn" onclick="logSharedCoffee()">☕ Logga gemensam kaffe</button>
+            <button class="connections-toggle" onclick="closeSharedCoffee()">Avbryt</button>
+            <div id="sharedCoffeeMsg" class="msg"></div>
+          </div>
           <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled id="removeBtn">− Remove last coffee</button>
           <button class="btn-primary" style="margin-top:12px;" id="statsBtn" onclick="showStats()">View Stats</button>
           <button class="btn-primary" style="margin-top:10px;" id="plotBtn" onclick="showPlot()">View Caffeine Plot</button>
@@ -352,6 +407,16 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         <div id="radarUsers" style="margin-top:12px;"></div>
         <div id="radarMsg" class="msg"></div>
       </div>
+      <div class="card" id="coffeeConnectionsCard">
+        <button class="connections-toggle" id="connectionsToggleBtn" onclick="toggleCoffeeConnections()">🤝 Coffee Connections ›</button>
+        <div id="coffeeConnectionsContent" class="hidden">
+          <h2 style="margin-top:18px;">🤝 Coffee Connections</h2>
+          <p class="muted">Gemensamma kaffestunder och vilka som oftast fikar tillsammans.</p>
+          <div id="connectionsSummary"></div>
+          <div id="connectionsList"></div>
+          <button class="connections-toggle" onclick="toggleCoffeeConnections(false)">Stäng</button>
+        </div>
+      </div>
 
       <div class="card">
         <h2 id="leaderboardHeader">🏆 Leaderboard</h2>
@@ -385,7 +450,7 @@ X-axis is hours of the day (0–24).
   </div>
 
   <script>
-    /* BUILD: v43-hallfens-lagrekord */
+    /* BUILD: v45-coffee-connections */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -424,6 +489,43 @@ create policy "insert coffee radar" on public.coffee_radar for insert with check
 create policy "update coffee radar" on public.coffee_radar for update using (true) with check (true);
 create policy "delete coffee radar" on public.coffee_radar for delete using (true);
 
+
+-- Shared coffee events
+create table if not exists public.shared_coffee_events (
+  id uuid primary key default gen_random_uuid(),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.shared_coffee_participants (
+  event_id uuid not null references public.shared_coffee_events(id) on delete cascade,
+  username text not null,
+  primary key (event_id, username)
+);
+alter table public.shared_coffee_events enable row level security;
+alter table public.shared_coffee_participants enable row level security;
+drop policy if exists "read shared coffee events" on public.shared_coffee_events;
+drop policy if exists "insert shared coffee events" on public.shared_coffee_events;
+create policy "read shared coffee events" on public.shared_coffee_events for select using (true);
+create policy "insert shared coffee events" on public.shared_coffee_events for insert with check (true);
+drop policy if exists "read shared coffee participants" on public.shared_coffee_participants;
+drop policy if exists "insert shared coffee participants" on public.shared_coffee_participants;
+create policy "read shared coffee participants" on public.shared_coffee_participants for select using (true);
+create policy "insert shared coffee participants" on public.shared_coffee_participants for insert with check (true);
+
+create or replace function public.log_shared_coffee(p_created_by text, p_usernames text[])
+returns uuid language plpgsql security definer set search_path=public as $$
+declare v_event_id uuid; v_names text[]; v_count int;
+begin
+  select array_agg(name order by name), count(*) into v_names, v_count
+  from (select distinct btrim(x) name from unnest(p_usernames) x where btrim(x) <> '') s;
+  if v_count < 2 then raise exception 'At least two unique participants required'; end if;
+  if not (p_created_by = any(v_names)) then raise exception 'Creator must be participant'; end if;
+  insert into public.shared_coffee_events(created_by) values(p_created_by) returning id into v_event_id;
+  insert into public.shared_coffee_participants(event_id,username) select v_event_id, unnest(v_names);
+  insert into public.coffees_by_username(username) select unnest(v_names);
+  return v_event_id;
+end; $$;
+grant execute on function public.log_shared_coffee(text,text[]) to anon, authenticated;
 
 create index if not exists coffees_by_username_user_ts_idx
   on public.coffees_by_username (username, timestamp desc);
@@ -526,6 +628,10 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       // Stats + caffeine plot are coffee-specific; hide in Beer mode.
       const radarCard = el("coffeeRadarCard");
       if (radarCard) radarCard.style.display = beer ? "none" : "";
+      const sharedBtn = el("sharedCoffeeBtn");
+      const connectionsCard = el("coffeeConnectionsCard");
+      if (sharedBtn) sharedBtn.style.display = beer ? "none" : "";
+      if (connectionsCard) connectionsCard.style.display = beer ? "none" : "";
 
       const statsBtn = el("statsBtn");
       const plotBtn  = el("plotBtn");
@@ -703,6 +809,65 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       await loadData();
     }
 
+
+    // -- Shared Coffee + Coffee Connections ---------------------------------------
+    function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+    async function openSharedCoffee() {
+      if (!currentUsername || !supabaseClient || isBeerMode()) return;
+      el("sharedCoffeePanel")?.classList.remove("hidden");
+      el("sharedCoffeeUsers").innerHTML='<p class="muted">Laddar användare…</p>';
+      const {data,error}=await supabaseClient.from("coffees_by_username").select("username");
+      if(error){ el("sharedCoffeeUsers").innerHTML='<p class="muted">Kunde inte ladda användare.</p>'; return; }
+      let users=[...new Set((data||[]).map(r=>(r.username||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"sv"));
+      if(!users.includes(currentUsername)) users.unshift(currentUsername);
+      users=[currentUsername,...users.filter(u=>u!==currentUsername)];
+      el("sharedCoffeeUsers").innerHTML=users.map(u=>{
+        const me=u===currentUsername;
+        return `<label class="shared-user-row"><input type="checkbox" class="shared-coffee-user" value="${escapeHtml(u)}" ${me?"checked disabled":""}><span>${escapeHtml(u)}${me?" (du)":""}</span></label>`;
+      }).join("");
+    }
+    function closeSharedCoffee(){ el("sharedCoffeePanel")?.classList.add("hidden"); }
+
+    async function logSharedCoffee(){
+      let selected=[...document.querySelectorAll(".shared-coffee-user:checked")].map(x=>x.value.trim()).filter(Boolean);
+      selected.push(currentUsername);
+      const participants=[...new Set(selected)]; // client-side duplicate protection
+      if(participants.length<2){ setMsg("sharedCoffeeMsg","Välj minst en person till.",true); return; }
+      const b=el("logSharedCoffeeBtn"); if(b)b.disabled=true;
+      const {error}=await supabaseClient.rpc("log_shared_coffee",{p_created_by:currentUsername,p_usernames:participants});
+      if(b)b.disabled=false;
+      if(error){ console.error(error); setMsg("sharedCoffeeMsg","Kunde inte logga. Kör den uppdaterade SQL-koden i adminläget.",true); return; }
+      closeSharedCoffee(); await loadData();
+      if(!el("coffeeConnectionsContent")?.classList.contains("hidden")) await loadCoffeeConnections();
+    }
+
+    async function toggleCoffeeConnections(forceOpen){
+      const c=el("coffeeConnectionsContent"); if(!c)return;
+      const open=typeof forceOpen==="boolean"?forceOpen:c.classList.contains("hidden");
+      c.classList.toggle("hidden",!open);
+      el("connectionsToggleBtn").textContent=open?"🤝 Coffee Connections ⌄":"🤝 Coffee Connections ›";
+      if(open) await loadCoffeeConnections();
+    }
+
+    async function loadCoffeeConnections(){
+      const s=el("connectionsSummary"), l=el("connectionsList");
+      s.innerHTML='<p class="muted">Laddar connections…</p>'; l.innerHTML="";
+      const {data,error}=await supabaseClient.from("shared_coffee_participants").select("event_id,username");
+      if(error){ s.innerHTML='<p class="muted">Coffee Connections är inte konfigurerad ännu. Kör den uppdaterade SQL-koden.</p>'; return; }
+      const events={};
+      for(const r of data||[]){ (events[r.event_id]??=new Set()).add(r.username); }
+      const pairs={}; let myEvents=0; const myPeople=new Set();
+      for(const set of Object.values(events)){
+        const n=[...set].sort((a,b)=>a.localeCompare(b,"sv"));
+        if(n.includes(currentUsername)){myEvents++; n.filter(x=>x!==currentUsername).forEach(x=>myPeople.add(x));}
+        for(let i=0;i<n.length;i++)for(let j=i+1;j<n.length;j++){const k=n[i]+"|||"+n[j];pairs[k]=(pairs[k]||0)+1;}
+      }
+      const rows=Object.entries(pairs).map(([k,count])=>{const [a,b]=k.split("|||");return{a,b,count,mine:a===currentUsername||b===currentUsername};}).sort((x,y)=>y.count-x.count);
+      s.innerHTML=`<p class="muted">Dina gemensamma kaffestunder: <strong>${myEvents}</strong> · Personer du fikat med: <strong>${myPeople.size}</strong></p>`;
+      const render=a=>a.length?a.map(r=>`<div class="connection-row"><span>${escapeHtml(r.a)} + ${escapeHtml(r.b)}</span><strong>${r.count} ☕</strong></div>`).join(""):'<p class="muted">Inga gemensamma kaffe ännu.</p>';
+      l.innerHTML='<div class="connection-section-title">Dina connections</div>'+render(rows.filter(r=>r.mine))+'<div class="connection-section-title">Alla connections</div>'+render(rows);
+    }
 
     // -- Coffee Radar -------------------------------------------------------------
     let coffeeRadarTimer = null;
