@@ -459,10 +459,34 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <p id="activityPlotNote" class="muted" style="text-align:center; margin-top:10px;"></p>
         </div>
         <div id="densityPlotView" class="hidden">
-          <p class="muted" style="text-align:center; margin-top:6px;">Mjuk sannolikhetskurva över när kaffe brukar registreras under dygnet.</p>
+          <p class="muted" style="text-align:center; margin-top:6px;">KDE-estimerad kaffetäthet över dygnets 24 timmar. Toppar markerar tidsintervall där historiska kafferegistreringar koncentreras.</p>
           <select id="densityUserFocus" onchange="setDensityUserFocus(this.value)" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin:8px 0 12px;"><option value="">Alla användare</option></select>
           <canvas id="densityCanvas" style="width:100%; height:46vh; max-height:520px; min-height:320px; display:block;"></canvas>
-          <p id="densityPlotNote" class="muted" style="text-align:center; margin-top:10px;"></p>
+          <p id="densityPlotNote" class="muted" style="text-align:center; margin-top:10px;">
+          <details class="kde-math" style="margin-top:12px; background:#f7fafc; border-radius:10px; padding:10px 12px;">
+            <summary style="cursor:pointer; font-weight:700; color:#4a5568;">ƒ(t) Visa matematiken</summary>
+            <div style="margin-top:10px; font-size:14px; line-height:1.55; color:#4a5568;">
+              <div style="font-weight:700; margin-bottom:6px;">Kernel Density Estimation (KDE)</div>
+              <div style="overflow-x:auto; padding:8px 0; font-family:Georgia, 'Times New Roman', serif; font-size:1.08em;">
+                f̂(t) = 1/(n·h) Σᵢ K(d(t,tᵢ)/h)
+              </div>
+              <div class="muted">
+                <strong>n</strong> = antal kaffe · <strong>tᵢ</strong> = registrerad kaffetid ·
+                <strong>h</strong> = bandbredd (0,75 h) · <strong>K</strong> = Gaussisk kernel
+              </div>
+              <div style="font-weight:700; margin-top:10px;">Cirkulärt 24 h-avstånd</div>
+              <div style="overflow-x:auto; padding:6px 0; font-family:Georgia, 'Times New Roman', serif; font-size:1.08em;">
+                d(t,tᵢ) = min(|t−tᵢ|, 24−|t−tᵢ|)
+              </div>
+              <div style="margin-top:6px;">
+                <strong>Tolkning:</strong> Varje ☕ skapar en liten Gaussisk puckel kring sin tidpunkt.
+                Alla pucklar summeras till kurvan. <strong>Högre kurva = högre empirisk kaffetäthet.</strong>
+              </div>
+              <div class="muted" style="margin-top:8px; font-style:italic;">
+                Statistiskt överkvalificerad metod för att ta reda på när folk går till kaffemaskinen.
+              </div>
+            </div>
+          </details></p>
         </div>
       </div>
 
@@ -471,7 +495,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v50-coffee-density-plot */
+    /* BUILD: v51-density-kde-math */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
