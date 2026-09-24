@@ -501,7 +501,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v52-activity-map-time-ranges */
+    /* BUILD: v53-activity-range-fix */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -1454,10 +1454,16 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     }
 
     function filterActivityRowsByRange(rows) {
-      if (activityRangeDays === "all") return rows || [];
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - activityRangeDays);
-      return (rows || []).filter(r => new Date(r.timestamp) >= cutoff);
+      const source = rows || [];
+      if (activityRangeDays === "all" || !source.length) return source;
+
+      // Rolling range ending "now". Keep the full dataset in lastActivityRows;
+      // only filter a copy for rendering.
+      const cutoffMs = Date.now() - Number(activityRangeDays) * 24 * 60 * 60 * 1000;
+      return source.filter(r => {
+        const ts = new Date(r.timestamp).getTime();
+        return Number.isFinite(ts) && ts >= cutoffMs;
+      });
     }
 
     function setActivityUserFocus(username) {
@@ -1509,7 +1515,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       }
       drawActivityMap(lastActivityRows);
       if (activityUserFocus) {
-        const n = lastActivityRows.filter(r => r.username === activityUserFocus).length;
+        const n = filterActivityRowsByRange(lastActivityRows || []).filter(r => r.username === activityUserFocus).length;
         const rangeLabel = activityRangeDays === "all" ? "All time" : `senaste ${activityRangeDays} dagarna`;
         el("activityPlotNote").textContent = `${activityUserFocus}: ${n} kaffe markerade · ${rangeLabel}. Övriga användare är nedtonade.`;
       }
@@ -1542,7 +1548,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     }
 
     function drawActivityMap(rows) {
-      rows = filterActivityRowsByRange(rows);
+      const visibleRows = filterActivityRowsByRange(rows);
+      rows = visibleRows;
       const canvas = el("activityCanvas"); if (!canvas) return;
       const ctx = canvas.getContext("2d"); if (!ctx) return;
       const w = canvas.clientWidth || 800, h = canvas.clientHeight || 420, dpr = window.devicePixelRatio || 1;
