@@ -455,6 +455,12 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
           <select id="activityUserFocus" onchange="setActivityUserFocus(this.value)" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin:8px 0 12px;">
             <option value="">Alla användare</option>
           </select>
+          <div class="radar-actions" id="activityRangeControls" style="margin:0 0 12px;">
+            <button class="btn-primary activity-range-btn" data-days="30" onclick="setActivityRange(30)">30 dagar</button>
+            <button class="activity-range-btn" data-days="90" onclick="setActivityRange(90)">90 dagar</button>
+            <button class="activity-range-btn" data-days="183" onclick="setActivityRange(183)">6 månader</button>
+            <button class="activity-range-btn" data-days="all" onclick="setActivityRange('all')">All time</button>
+          </div>
           <canvas id="activityCanvas" style="width:100%; height:55vh; max-height:620px; min-height:360px; display:block;"></canvas>
           <p id="activityPlotNote" class="muted" style="text-align:center; margin-top:10px;"></p>
         </div>
@@ -495,7 +501,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v51-density-kde-math */
+    /* BUILD: v52-activity-map-time-ranges */
 
     // Avoid naming conflict with global 'supabase' from the CDN
     let supabaseClient = null;
@@ -1434,6 +1440,26 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       if(users.includes(densityUserFocus)) s.value=densityUserFocus; else densityUserFocus="";
     }
 
+    let activityRangeDays = 30;
+
+    function setActivityRange(days) {
+      activityRangeDays = days === "all" ? "all" : Number(days);
+      document.querySelectorAll(".activity-range-btn").forEach(btn => {
+        const raw = btn.getAttribute("data-days");
+        const active = (activityRangeDays === "all" && raw === "all") ||
+          (activityRangeDays !== "all" && Number(raw) === activityRangeDays);
+        btn.classList.toggle("btn-primary", active);
+      });
+      drawActivityMap(lastActivityRows || []);
+    }
+
+    function filterActivityRowsByRange(rows) {
+      if (activityRangeDays === "all") return rows || [];
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - activityRangeDays);
+      return (rows || []).filter(r => new Date(r.timestamp) >= cutoff);
+    }
+
     function setActivityUserFocus(username) {
       activityUserFocus = username || "";
       drawActivityMap(lastActivityRows || []);
@@ -1484,7 +1510,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       drawActivityMap(lastActivityRows);
       if (activityUserFocus) {
         const n = lastActivityRows.filter(r => r.username === activityUserFocus).length;
-        el("activityPlotNote").textContent = `${activityUserFocus}: ${n} kaffe markerade. Övriga användare är nedtonade.`;
+        const rangeLabel = activityRangeDays === "all" ? "All time" : `senaste ${activityRangeDays} dagarna`;
+        el("activityPlotNote").textContent = `${activityUserFocus}: ${n} kaffe markerade · ${rangeLabel}. Övriga användare är nedtonade.`;
       }
     }
 
@@ -1507,9 +1534,15 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       ctx.beginPath();pts.forEach((p,i)=>{const x=x0+p.x/24*(x1-x0),y=y0-p.d/max*(y0-y1);if(i===0)ctx.moveTo(x,y0);ctx.lineTo(x,y);});ctx.lineTo(x1,y0);ctx.closePath();ctx.fillStyle="rgba(102,126,234,.16)";ctx.fill();
       ctx.beginPath();pts.forEach((p,i)=>{const x=x0+p.x/24*(x1-x0),y=y0-p.d/max*(y0-y1);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.strokeStyle="rgba(102,126,234,.95)";ctx.lineWidth=2.5;ctx.stroke();
       if(hours.length){const peak=pts.reduce((a,b)=>b.d>a.d?b:a);const ph=Math.floor(peak.x)%24,pm=Math.round((peak.x-ph)*60)%60;el("densityPlotNote").textContent=`${densityUserFocus||'Alla användare'}: ${hours.length} kaffe analyserade · Peak ≈ ${String(ph).padStart(2,'0')}:${String(pm).padStart(2,'0')} · KDE-bandbredd 0,75 h.`;} else el("densityPlotNote").textContent="Inga kafferegistreringar för valt urval.";
+      if (!activityUserFocus) {
+        const visibleRows = filterActivityRowsByRange(lastActivityRows || []);
+        const rangeLabel = activityRangeDays === "all" ? "All time" : `senaste ${activityRangeDays} dagarna`;
+        if (el("activityPlotNote")) el("activityPlotNote").textContent = `${visibleRows.length} kafferegistreringar visas · ${rangeLabel}.`;
+      }
     }
 
     function drawActivityMap(rows) {
+      rows = filterActivityRowsByRange(rows);
       const canvas = el("activityCanvas"); if (!canvas) return;
       const ctx = canvas.getContext("2d"); if (!ctx) return;
       const w = canvas.clientWidth || 800, h = canvas.clientHeight || 420, dpr = window.devicePixelRatio || 1;
