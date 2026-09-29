@@ -496,7 +496,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v57-larsson-state-fix */
+    /* BUILD: v58-larsson-3plus3 */
 
     let supabaseClient = null;
 
@@ -1177,53 +1177,95 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     window.addEventListener("resize", handlePlotResize);
     window.addEventListener("orientationchange", handlePlotResize);
 
-    // ── Larsson Mode: 3 quick taps + hold 2 seconds ───────────────────────────────
+    // ── Larsson Mode: 3 taps → animation → 3 taps within 3 seconds ────────────────
     function applyLarssonMode(enabled, announce=true) {
-      if (enabled) { localStorage.setItem(BEER_MODE_KEY,"0"); document.body.classList.remove("beer-mode"); }
+      if (enabled) {
+        localStorage.setItem(BEER_MODE_KEY,"0");
+        document.body.classList.remove("beer-mode");
+      }
       localStorage.setItem(LARSSON_MODE_KEY,enabled?"1":"0");
       document.body.classList.toggle("larsson-mode",!!enabled);
-      if (!enabled) document.body.classList.remove("larsson-mode");
-      document.querySelectorAll(".app-title").forEach(x=>x.textContent=enabled?LARSSON_TITLE:(isBeerMode()?BEER_TITLE:COFFEE_TITLE));
-      document.querySelectorAll(".app-logo").forEach(img=>{
-        const use512=(img.getAttribute("src")||"").includes("512");
-        img.src=enabled?(use512?LARSSON_ICON_512:LARSSON_ICON_192):(isBeerMode()?(use512?BEER_ICON_512:BEER_ICON_192):(use512?COFFEE_ICON_512:COFFEE_ICON_192));
-      });
-      refreshModeUI();
-      if(currentUsername&&supabaseClient&&!el("app")?.classList.contains("hidden")) loadData();
-      if(enabled&&announce) alert("🎩 LARSSON MODE\\n\\n✦ THE SECRET STOUT SOCIETY ✦\\n\\nExtraordinary circumstances require extraordinary refreshments.");
-    }
 
-    let larssonTaps=0, larssonTapTimer=null, larssonArmTimer=null, larssonHoldTimer=null, larssonArmed=false, larssonSuppress=false;
-    function resetLarssonGesture(){
-      larssonTaps=0; larssonArmed=false;
-      clearTimeout(larssonTapTimer); clearTimeout(larssonArmTimer); clearTimeout(larssonHoldTimer);
-      document.querySelectorAll(".app-logo").forEach(x=>x.classList.remove("larsson-armed"));
-    }
-    function larssonTap(img){
-      if(larssonArmed)return;
-      larssonTaps++;
-      clearTimeout(larssonTapTimer);
-      larssonTapTimer=setTimeout(resetLarssonGesture,1200);
-      if(larssonTaps===3){
-        larssonArmed=true; larssonTaps=0; clearTimeout(larssonTapTimer);
-        img.classList.add("larsson-armed");
-        larssonArmTimer=setTimeout(resetLarssonGesture,3000);
+      document.querySelectorAll(".app-title").forEach(x =>
+        x.textContent = enabled ? LARSSON_TITLE : (isBeerMode() ? BEER_TITLE : COFFEE_TITLE)
+      );
+      document.querySelectorAll(".app-logo").forEach(img => {
+        const use512 = (img.getAttribute("src")||"").includes("512");
+        img.src = enabled
+          ? (use512 ? LARSSON_ICON_512 : LARSSON_ICON_192)
+          : (isBeerMode()
+              ? (use512 ? BEER_ICON_512 : BEER_ICON_192)
+              : (use512 ? COFFEE_ICON_512 : COFFEE_ICON_192));
+      });
+
+      refreshModeUI();
+      if (currentUsername && supabaseClient && !el("app")?.classList.contains("hidden")) loadData();
+
+      if (enabled && announce) {
+        alert("🎩 LARSSON MODE\n\n✦ THE SECRET STOUT SOCIETY ✦\n\nExtraordinary circumstances require extraordinary refreshments.");
       }
     }
-    function larssonHoldStart(e){
-      if(!larssonArmed)return;
-      if(e.cancelable)e.preventDefault();
-      clearTimeout(larssonArmTimer);
-      larssonHoldTimer=setTimeout(()=>{
-        larssonSuppress=true;
-        applyLarssonMode(!isLarssonMode(),true);
-        resetLarssonGesture();
-        setTimeout(()=>larssonSuppress=false,500);
-      },2000);
+
+    let larssonStage = 0;       // 0 = waiting for first triple, 1 = waiting for second triple
+    let larssonTapCount = 0;
+    let larssonTapTimer = null;
+    let larssonStageTimer = null;
+
+    function resetLarssonGesture() {
+      larssonStage = 0;
+      larssonTapCount = 0;
+      clearTimeout(larssonTapTimer);
+      clearTimeout(larssonStageTimer);
+      larssonTapTimer = null;
+      larssonStageTimer = null;
+      document.querySelectorAll(".app-logo").forEach(x => x.classList.remove("larsson-armed"));
     }
-    function larssonHoldEnd(){
-      if(larssonHoldTimer){clearTimeout(larssonHoldTimer);larssonHoldTimer=null;}
-      if(larssonArmed){clearTimeout(larssonArmTimer);larssonArmTimer=setTimeout(resetLarssonGesture,1800);}
+
+    function registerLarssonTap(img) {
+      larssonTapCount++;
+
+      // Each triple must itself be reasonably quick.
+      clearTimeout(larssonTapTimer);
+      larssonTapTimer = setTimeout(() => {
+        larssonTapCount = 0;
+        if (larssonStage === 0) resetLarssonGesture();
+      }, 1200);
+
+      if (larssonTapCount < 3) return;
+
+      larssonTapCount = 0;
+      clearTimeout(larssonTapTimer);
+
+      if (larssonStage === 0) {
+        // First triple: subtle visual hint, then open a 3-second secret window.
+        larssonStage = 1;
+        img.classList.remove("larsson-armed");
+        void img.offsetWidth; // restart CSS animation reliably
+        img.classList.add("larsson-armed");
+
+        clearTimeout(larssonStageTimer);
+        larssonStageTimer = setTimeout(resetLarssonGesture, 3000);
+
+        // Do not let the first triple contribute toward Beer Mode's five taps.
+        beerTapCount = 0;
+        if (beerTapTimer) clearTimeout(beerTapTimer);
+        return;
+      }
+
+      // Second triple arrived inside the 3-second window.
+      clearTimeout(larssonStageTimer);
+      const enable = !isLarssonMode();
+      resetLarssonGesture();
+
+      // Larsson and Beer Mode are mutually exclusive.
+      if (enable) {
+        localStorage.setItem(BEER_MODE_KEY, "0");
+        document.body.classList.remove("beer-mode");
+      }
+      applyLarssonMode(enable, enable);
+
+      beerTapCount = 0;
+      if (beerTapTimer) clearTimeout(beerTapTimer);
     }
 
     // ── Beer mode Easter egg ──────────────────────────────────────────────────────
@@ -1250,15 +1292,20 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     }
     function bindBeerModeLogoHandlers() {
       document.querySelectorAll(".app-logo").forEach(img => {
-        img.addEventListener("pointerdown",larssonHoldStart);
-        img.addEventListener("pointerup",larssonHoldEnd);
-        img.addEventListener("pointercancel",larssonHoldEnd);
-        img.addEventListener("pointerleave",larssonHoldEnd);
-        img.addEventListener("click",e=>{
-          if(larssonSuppress){e.preventDefault();return;}
-          larssonTap(img);
-          if (!larssonArmed) toggleBeerModeTap();
-          else { beerTapCount = 0; if (beerTapTimer) clearTimeout(beerTapTimer); }
+        img.addEventListener("click", e => {
+          e.preventDefault();
+
+          const stageBeforeTap = larssonStage;
+          registerLarssonTap(img);
+
+          // Beer Mode keeps its original 5-fast-tap gesture only while
+          // Larsson's secret sequence is not armed.
+          if (stageBeforeTap === 0 && larssonStage === 0) {
+            toggleBeerModeTap();
+          } else {
+            beerTapCount = 0;
+            if (beerTapTimer) clearTimeout(beerTapTimer);
+          }
         });
       });
     }
