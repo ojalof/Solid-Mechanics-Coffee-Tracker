@@ -496,7 +496,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v56-larsson-secret-stout */
+    /* BUILD: v57-larsson-state-fix */
 
     let supabaseClient = null;
 
@@ -540,6 +540,19 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     function getDrinkNamePlural() { return isLarssonMode() ? "Guinness" : (isBeerMode() ? "beers" : "coffees"); }
     function getDrinkEmoji() { return isLarssonMode() ? "🍺" : (isBeerMode() ? "🍺" : "☕"); }
 
+    function resetToCoffeeMode() {
+      localStorage.setItem(BEER_MODE_KEY, "0");
+      localStorage.setItem(LARSSON_MODE_KEY, "0");
+      document.body.classList.remove("beer-mode", "larsson-mode");
+      document.querySelectorAll(".app-title").forEach(x => x.textContent = COFFEE_TITLE);
+      document.querySelectorAll(".app-logo").forEach(img => {
+        const use512 = (img.getAttribute("src") || "").toLowerCase().includes("512");
+        img.setAttribute("src", use512 ? COFFEE_ICON_512 : COFFEE_ICON_192);
+        img.style.cursor = "pointer";
+      });
+      refreshModeUI();
+    }
+
     function refreshModeUI() {
       const beer = isBeerMode();
       const larsson = isLarssonMode();
@@ -548,8 +561,8 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const removeBtn = el("removeCoffeeBtn"); if (removeBtn) removeBtn.textContent = larsson ? "– Remove last Guinness" : (beer ? "– Remove last beer" : "– Remove last coffee");
       const histHeader = el("historyHeader"); if (histHeader) histHeader.textContent = larsson ? "Recent Guinness" : (beer ? "Recent beers" : "Recent coffees");
       const lbHeader = el("leaderboardHeader"); if (lbHeader) lbHeader.textContent = larsson ? "🎩 Larssonboard" : (beer ? "🍺 Beerboard" : "🏆 Leaderboard");
-      document.querySelectorAll(".beer-only-tab").forEach(t => t.classList.toggle("hidden", !beer));
-      if (!beer && currentLeaderboardView === "lagrekord") {
+      document.querySelectorAll(".beer-only-tab").forEach(t => t.classList.toggle("hidden", !beer || larsson));
+      if ((!beer || larsson) && currentLeaderboardView === "lagrekord") {
         currentLeaderboardView = "today";
         document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
         const todayTab = document.querySelector('.tab[data-view="today"]');
@@ -569,7 +582,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     }
     function show(which) {
       hideAll();
-      if (which === "login") { applyBeerMode(false); refreshModeUI(); }
+      if (which === "login") { resetToCoffeeMode(); }
       if (which === "app") el("app")?.classList.remove("hidden");
       else el(which)?.classList.remove("hidden");
     }
@@ -591,7 +604,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     function goToApp() { const u = new URL(window.location.href); u.searchParams.delete("admin"); window.location.href = u.toString(); }
 
     function doLogin() {
-      applyBeerMode(false); refreshModeUI();
+      resetToCoffeeMode();
       const normalized = (el("username")?.value ?? "").trim();
       if (!validUsername(normalized)) { setMsg("loginMsg","Invalid username (1–32 chars).", true); return; }
       currentUsername = normalized;
@@ -603,7 +616,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       currentUsername = null;
       if (coffeeRadarTimer) { clearInterval(coffeeRadarTimer); coffeeRadarTimer = null; }
       if (typeof hidePlot === "function") hidePlot();
-      applyBeerMode(false); refreshModeUI();
+      resetToCoffeeMode();
       show("login");
     }
     function showApp() {
@@ -629,7 +642,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         .order("timestamp", { ascending: false }).limit(1);
       if (error) { console.error("removeLastCoffee select:", error); alert("Could not find last coffee."); return; }
       const last = (data || [])[0]; if (!last) return;
-      const ok = confirm("Remove your most recent " + (isBeerMode() ? "beer" : "coffee") + " from today?");
+      const ok = confirm("Remove your most recent " + (isLarssonMode() ? "Guinness" : (isBeerMode() ? "beer" : "coffee")) + " from today?");
       if (!ok) return;
       const del = await supabaseClient.from(getActiveTable()).delete({ returning: "minimal" }).eq("id", last.id);
       if (del.error) { console.error("removeLastCoffee delete:", del.error); alert("Could not remove: " + String(del.error.message || del.error)); return; }
@@ -652,6 +665,19 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       return { data: allRows, error: null };
     }
 
+    async function fetchAllActiveDrinksAllUsers() {
+      const PAGE_SIZE = 1000; const allRows = [];
+      const table = getActiveTable();
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabaseClient.from(table)
+          .select("username,timestamp").order("timestamp", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        const page = data || []; allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+      return { data: allRows, error: null };
+    }
+
     async function fetchAllCoffeesAllUsers() {
       const PAGE_SIZE = 1000; const allRows = [];
       for (let from = 0; ; from += PAGE_SIZE) {
@@ -667,7 +693,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     // ── Shared Coffee + Coffee Connections ───────────────────────────────────────
     async function openSharedCoffee() {
-      if (!currentUsername || !supabaseClient || isBeerMode()) return;
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
       el("sharedCoffeePanel")?.classList.remove("hidden");
       el("sharedCoffeeUsers").innerHTML = '<p class="muted">Laddar användare…</p>';
       const { data, error } = await supabaseClient.from("coffees_by_username").select("username");
@@ -704,7 +730,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     async function loadCoffeeConnectionsPublic() {
       const box = el("connectionsPublicSummary");
-      if (!box || !supabaseClient || isBeerMode()) return;
+      if (!box || !supabaseClient || isBeerMode() || isLarssonMode()) return;
       const [pr, tr] = await Promise.all([
         supabaseClient.from("shared_coffee_participants").select("event_id,username"),
         supabaseClient.from("coffees_by_username").select("id", { count: "exact", head: true }).gte("timestamp","2026-09-22T22:00:00.000Z")
@@ -768,7 +794,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       await loadCoffeeRadar();
     }
     async function loadCoffeeRadar() {
-      if (!currentUsername || !supabaseClient || isBeerMode()) return;
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
       const { data, error } = await supabaseClient.from("coffee_radar").select("username,coffee_at,expires_at")
         .gt("expires_at", new Date().toISOString()).order("coffee_at", { ascending: true });
       if (error) { el("radarUsers").innerHTML = '<p class="muted">Coffee Radar är inte konfigurerad ännu.</p>'; return; }
@@ -788,7 +814,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       if (coffeeRadarTimer) clearInterval(coffeeRadarTimer);
       loadCoffeeRadar();
       coffeeRadarTimer = setInterval(() => {
-        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode()) loadCoffeeRadar();
+        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode() && !isLarssonMode()) loadCoffeeRadar();
       }, 10000);
     }
 
@@ -818,7 +844,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       // Max/day: needs full dataset — use paginated fetch
       if (currentLeaderboardView === "maxday") {
-        const { data, error } = await fetchAllCoffeesAllUsers();
+        const { data, error } = await fetchAllActiveDrinksAllUsers();
         if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load max/day leaderboard.</p>`; return; }
         const perUserDay = {};
         for (const r of (data||[])) {
@@ -1156,6 +1182,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       if (enabled) { localStorage.setItem(BEER_MODE_KEY,"0"); document.body.classList.remove("beer-mode"); }
       localStorage.setItem(LARSSON_MODE_KEY,enabled?"1":"0");
       document.body.classList.toggle("larsson-mode",!!enabled);
+      if (!enabled) document.body.classList.remove("larsson-mode");
       document.querySelectorAll(".app-title").forEach(x=>x.textContent=enabled?LARSSON_TITLE:(isBeerMode()?BEER_TITLE:COFFEE_TITLE));
       document.querySelectorAll(".app-logo").forEach(img=>{
         const use512=(img.getAttribute("src")||"").includes("512");
@@ -1230,7 +1257,8 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
         img.addEventListener("click",e=>{
           if(larssonSuppress){e.preventDefault();return;}
           larssonTap(img);
-          toggleBeerModeTap();
+          if (!larssonArmed) toggleBeerModeTap();
+          else { beerTapCount = 0; if (beerTapTimer) clearTimeout(beerTapTimer); }
         });
       });
     }
@@ -1240,7 +1268,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       const params = new URLSearchParams(window.location.search);
       if (params.get("admin")==="1") { showSetupAdmin(); return; }
       bindBeerModeLogoHandlers();
-      applyBeerMode(false); refreshModeUI();
+      resetToCoffeeMode();
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.error);
       if (typeof window.supabase==="undefined") { setMsg("loginMsg","Supabase library failed to load (network / CDN blocked).",true); return; }
       if (!SUPABASE_URL||SUPABASE_URL.includes("PASTE_YOUR")||!SUPABASE_ANON_KEY||SUPABASE_ANON_KEY.includes("PASTE_YOUR")) { setMsg("loginMsg","App not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in index.html.",true); return; }
