@@ -130,6 +130,55 @@
     body.beer-mode .count { color: #dd6b20; }
     body.beer-mode .tab.active { background: #dd6b20; }
     body.beer-mode .leaderboard-item.me { background: #dd6b20; }
+    /* Larsson Mode — The Secret Stout Society */
+    body.larsson-mode {
+      background:
+        radial-gradient(circle at 50% -10%, rgba(212,175,55,.16), transparent 34%),
+        linear-gradient(180deg,#050505 0%,#0b0b0b 55%,#000 100%);
+      color:#e8dfc5;
+    }
+    body.larsson-mode .card {
+      background:linear-gradient(145deg,rgba(20,20,20,.98),rgba(5,5,5,.99));
+      border:1px solid rgba(212,175,55,.42);
+      box-shadow:0 12px 38px rgba(0,0,0,.68), inset 0 0 0 1px rgba(255,215,90,.04);
+    }
+    body.larsson-mode h1, body.larsson-mode h2 { color:#d4af37; }
+    body.larsson-mode .app-title {
+      color:#d4af37;
+      font-family:Georgia,"Times New Roman",serif;
+      font-weight:700;
+      letter-spacing:.055em;
+      text-shadow:0 1px 0 #fff1a8,0 3px 14px rgba(212,175,55,.28);
+    }
+    body.larsson-mode .brand::after {
+      content:"✦ THE SECRET STOUT SOCIETY ✦";
+      display:block;
+      color:#9f8745;
+      font-family:Georgia,"Times New Roman",serif;
+      font-size:10px;
+      letter-spacing:.19em;
+      margin-top:1px;
+      text-align:center;
+    }
+    body.larsson-mode .subtitle, body.larsson-mode .muted { color:#aaa28e; }
+    body.larsson-mode .count { color:#d4af37; text-shadow:0 2px 14px rgba(212,175,55,.22); }
+    body.larsson-mode .coffee-btn, body.larsson-mode .btn-primary {
+      background:linear-gradient(180deg,#e0bd49,#9b7418);
+      color:#080808;
+      border:1px solid #e8c95b;
+      box-shadow:0 5px 18px rgba(0,0,0,.45);
+    }
+    body.larsson-mode .btn-danger {
+      background:#1b1b1b; color:#d4af37; border:1px solid rgba(212,175,55,.48);
+    }
+    body.larsson-mode .tab { background:#171717; color:#c9c0a8; border:1px solid rgba(212,175,55,.18); }
+    body.larsson-mode .tab.active { background:linear-gradient(180deg,#d4af37,#9b7418); color:#080808; }
+    body.larsson-mode .leaderboard-item { background:#111; color:#ddd3b8; border:1px solid rgba(212,175,55,.16); }
+    body.larsson-mode .leaderboard-item.me { background:linear-gradient(90deg,#5f4710,#9b7418); color:#fff4c5; border-color:#d4af37; }
+    body.larsson-mode .history-item { border-bottom-color:rgba(212,175,55,.16); color:#ddd3b8; }
+    body.larsson-mode .app-logo { filter:drop-shadow(0 7px 16px rgba(0,0,0,.7)) drop-shadow(0 0 9px rgba(212,175,55,.14)); }
+    .app-logo.larsson-armed { animation:larssonHint .45s ease-in-out 2; }
+    @keyframes larssonHint { 0%,100%{transform:rotate(0) scale(1)} 50%{transform:rotate(-4deg) scale(1.045)} }
 
     .lagrekord-day {
       margin-bottom: 16px;
@@ -254,6 +303,27 @@ begin
   return v_event_id;
 end; $$;
 grant execute on function public.log_shared_coffee(text,text[]) to anon, authenticated;
+
+create table if not exists public.guinness_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+create index if not exists guinness_by_username_user_ts_idx on public.guinness_by_username (username,timestamp desc);
+alter table public.guinness_by_username enable row level security;
+drop policy if exists "read all guinness" on public.guinness_by_username;
+drop policy if exists "insert guinness" on public.guinness_by_username;
+drop policy if exists "update guinness" on public.guinness_by_username;
+drop policy if exists "delete guinness" on public.guinness_by_username;
+create policy "read all guinness" on public.guinness_by_username for select using (true);
+create policy "insert guinness" on public.guinness_by_username for insert with check (true);
+create policy "update guinness" on public.guinness_by_username for update using (true) with check (true);
+create policy "delete guinness" on public.guinness_by_username for delete using (true);
+create or replace function public.leaderboard_guinness_since(ts timestamptz)
+returns table (username text, coffees int) language sql security definer as $$
+ select g.username,count(*)::int from public.guinness_by_username g where g.timestamp>=ts group by g.username order by count(*) desc;
+$$;
+grant execute on function public.leaderboard_guinness_since(timestamptz) to anon, authenticated;
 
 create index if not exists coffees_by_username_user_ts_idx
   on public.coffees_by_username (username, timestamp desc);
@@ -426,7 +496,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v54-pagination-fix */
+    /* BUILD: v56-larsson-secret-stout */
 
     let supabaseClient = null;
 
@@ -440,12 +510,16 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     const CAFFEINE_HALF_LIFE_HOURS = 5;
     const CAT_TREATS_PER_COFFEE = 1;
     const BEER_MODE_KEY = "beer_mode_enabled";
+    const LARSSON_MODE_KEY = "larsson_mode_enabled";
     const COFFEE_TITLE = "Coffee Tracker";
     const BEER_TITLE = "Beer mode";
+    const LARSSON_TITLE = "Larsson mode";
     const COFFEE_ICON_192 = "icons/icon-192.png";
     const COFFEE_ICON_512 = "icons/icon-512.png";
     const BEER_ICON_192 = "icons/icon_beermode_192.png";
     const BEER_ICON_512 = "icons/icon_beermode_512.png";
+    const LARSSON_ICON_192 = "icons/icon_larsson_192.png";
+    const LARSSON_ICON_512 = "icons/icon_larsson_512.png";
 
     let currentUsername = null;
     let currentLeaderboardView = "today";
@@ -461,17 +535,19 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     }
 
     function isBeerMode() { return localStorage.getItem(BEER_MODE_KEY) === "1"; }
-    function getActiveTable() { return isBeerMode() ? "beers_by_username" : "coffees_by_username"; }
-    function getDrinkNamePlural() { return isBeerMode() ? "beers" : "coffees"; }
-    function getDrinkEmoji() { return isBeerMode() ? "🍺" : "☕"; }
+    function isLarssonMode() { return localStorage.getItem(LARSSON_MODE_KEY) === "1"; }
+    function getActiveTable() { return isLarssonMode() ? "guinness_by_username" : (isBeerMode() ? "beers_by_username" : "coffees_by_username"); }
+    function getDrinkNamePlural() { return isLarssonMode() ? "Guinness" : (isBeerMode() ? "beers" : "coffees"); }
+    function getDrinkEmoji() { return isLarssonMode() ? "🍺" : (isBeerMode() ? "🍺" : "☕"); }
 
     function refreshModeUI() {
       const beer = isBeerMode();
-      const todayLabel = el("todayLabel"); if (todayLabel) todayLabel.textContent = beer ? "Beers today" : "Coffees today";
-      const addBtn = el("addDrinkBtn"); if (addBtn) addBtn.textContent = beer ? "+ Add Beer" : "+ Add Coffee";
-      const removeBtn = el("removeCoffeeBtn"); if (removeBtn) removeBtn.textContent = beer ? "– Remove last beer" : "– Remove last coffee";
-      const histHeader = el("historyHeader"); if (histHeader) histHeader.textContent = beer ? "Recent beers" : "Recent coffees";
-      const lbHeader = el("leaderboardHeader"); if (lbHeader) lbHeader.textContent = beer ? "🍺 Beerboard" : "🏆 Leaderboard";
+      const larsson = isLarssonMode();
+      const todayLabel = el("todayLabel"); if (todayLabel) todayLabel.textContent = larsson ? "Guinness today" : (beer ? "Beers today" : "Coffees today");
+      const addBtn = el("addDrinkBtn"); if (addBtn) addBtn.textContent = larsson ? "+ Add Guinness" : (beer ? "+ Add Beer" : "+ Add Coffee");
+      const removeBtn = el("removeCoffeeBtn"); if (removeBtn) removeBtn.textContent = larsson ? "– Remove last Guinness" : (beer ? "– Remove last beer" : "– Remove last coffee");
+      const histHeader = el("historyHeader"); if (histHeader) histHeader.textContent = larsson ? "Recent Guinness" : (beer ? "Recent beers" : "Recent coffees");
+      const lbHeader = el("leaderboardHeader"); if (lbHeader) lbHeader.textContent = larsson ? "🎩 Larssonboard" : (beer ? "🍺 Beerboard" : "🏆 Leaderboard");
       document.querySelectorAll(".beer-only-tab").forEach(t => t.classList.toggle("hidden", !beer));
       if (!beer && currentLeaderboardView === "lagrekord") {
         currentLeaderboardView = "today";
@@ -479,12 +555,12 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         const todayTab = document.querySelector('.tab[data-view="today"]');
         if (todayTab) todayTab.classList.add("active");
       }
-      const radarCard = el("coffeeRadarCard"); if (radarCard) radarCard.style.display = beer ? "none" : "";
-      const sharedBtn = el("sharedCoffeeBtn"); if (sharedBtn) sharedBtn.style.display = beer ? "none" : "";
-      const connectionsCard = el("coffeeConnectionsCard"); if (connectionsCard) connectionsCard.style.display = beer ? "none" : "";
-      const statsBtn = el("statsBtn"); if (statsBtn) statsBtn.style.display = beer ? "none" : "";
-      const plotBtn = el("plotBtn"); if (plotBtn) plotBtn.style.display = beer ? "none" : "";
-      if (beer) { if (typeof hideStats === "function") hideStats(); if (typeof hidePlot === "function") hidePlot(); }
+      const radarCard = el("coffeeRadarCard"); if (radarCard) radarCard.style.display = (beer || larsson) ? "none" : "";
+      const sharedBtn = el("sharedCoffeeBtn"); if (sharedBtn) sharedBtn.style.display = (beer || larsson) ? "none" : "";
+      const connectionsCard = el("coffeeConnectionsCard"); if (connectionsCard) connectionsCard.style.display = (beer || larsson) ? "none" : "";
+      const statsBtn = el("statsBtn"); if (statsBtn) statsBtn.style.display = (beer || larsson) ? "none" : "";
+      const plotBtn = el("plotBtn"); if (plotBtn) plotBtn.style.display = (beer || larsson) ? "none" : "";
+      if (beer || larsson) { if (typeof hideStats === "function") hideStats(); if (typeof hidePlot === "function") hidePlot(); }
     }
 
     function hideAll() {
@@ -774,7 +850,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       let rows = null;
       try {
-        const fn = isBeerMode() ? "leaderboard_beer_since" : "leaderboard_username_since";
+        const fn = isLarssonMode() ? "leaderboard_guinness_since" : (isBeerMode() ? "leaderboard_beer_since" : "leaderboard_username_since");
         const { data, error } = await supabaseClient.rpc(fn, { ts: startDate.toISOString() });
         if (!error) rows = data;
       } catch (e) {}
@@ -1075,9 +1151,58 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     window.addEventListener("resize", handlePlotResize);
     window.addEventListener("orientationchange", handlePlotResize);
 
+    // ── Larsson Mode: 3 quick taps + hold 2 seconds ───────────────────────────────
+    function applyLarssonMode(enabled, announce=true) {
+      if (enabled) { localStorage.setItem(BEER_MODE_KEY,"0"); document.body.classList.remove("beer-mode"); }
+      localStorage.setItem(LARSSON_MODE_KEY,enabled?"1":"0");
+      document.body.classList.toggle("larsson-mode",!!enabled);
+      document.querySelectorAll(".app-title").forEach(x=>x.textContent=enabled?LARSSON_TITLE:(isBeerMode()?BEER_TITLE:COFFEE_TITLE));
+      document.querySelectorAll(".app-logo").forEach(img=>{
+        const use512=(img.getAttribute("src")||"").includes("512");
+        img.src=enabled?(use512?LARSSON_ICON_512:LARSSON_ICON_192):(isBeerMode()?(use512?BEER_ICON_512:BEER_ICON_192):(use512?COFFEE_ICON_512:COFFEE_ICON_192));
+      });
+      refreshModeUI();
+      if(currentUsername&&supabaseClient&&!el("app")?.classList.contains("hidden")) loadData();
+      if(enabled&&announce) alert("🎩 LARSSON MODE\\n\\n✦ THE SECRET STOUT SOCIETY ✦\\n\\nExtraordinary circumstances require extraordinary refreshments.");
+    }
+
+    let larssonTaps=0, larssonTapTimer=null, larssonArmTimer=null, larssonHoldTimer=null, larssonArmed=false, larssonSuppress=false;
+    function resetLarssonGesture(){
+      larssonTaps=0; larssonArmed=false;
+      clearTimeout(larssonTapTimer); clearTimeout(larssonArmTimer); clearTimeout(larssonHoldTimer);
+      document.querySelectorAll(".app-logo").forEach(x=>x.classList.remove("larsson-armed"));
+    }
+    function larssonTap(img){
+      if(larssonArmed)return;
+      larssonTaps++;
+      clearTimeout(larssonTapTimer);
+      larssonTapTimer=setTimeout(resetLarssonGesture,1200);
+      if(larssonTaps===3){
+        larssonArmed=true; larssonTaps=0; clearTimeout(larssonTapTimer);
+        img.classList.add("larsson-armed");
+        larssonArmTimer=setTimeout(resetLarssonGesture,3000);
+      }
+    }
+    function larssonHoldStart(e){
+      if(!larssonArmed)return;
+      if(e.cancelable)e.preventDefault();
+      clearTimeout(larssonArmTimer);
+      larssonHoldTimer=setTimeout(()=>{
+        larssonSuppress=true;
+        applyLarssonMode(!isLarssonMode(),true);
+        resetLarssonGesture();
+        setTimeout(()=>larssonSuppress=false,500);
+      },2000);
+    }
+    function larssonHoldEnd(){
+      if(larssonHoldTimer){clearTimeout(larssonHoldTimer);larssonHoldTimer=null;}
+      if(larssonArmed){clearTimeout(larssonArmTimer);larssonArmTimer=setTimeout(resetLarssonGesture,1800);}
+    }
+
     // ── Beer mode Easter egg ──────────────────────────────────────────────────────
     let beerTapCount=0, beerTapTimer=null;
     function applyBeerMode(enabled) {
+      if (enabled) { localStorage.setItem(LARSSON_MODE_KEY,"0"); document.body.classList.remove("larsson-mode"); }
       document.querySelectorAll(".app-title").forEach(t => t.textContent = enabled ? BEER_TITLE : COFFEE_TITLE);
       document.querySelectorAll(".app-logo").forEach(img => {
         const use512 = (img.getAttribute("src")||"").toLowerCase().includes("512");
@@ -1098,8 +1223,15 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
     }
     function bindBeerModeLogoHandlers() {
       document.querySelectorAll(".app-logo").forEach(img => {
-        img.addEventListener("click", toggleBeerModeTap);
-        img.addEventListener("touchend",(e)=>{e.preventDefault();toggleBeerModeTap();},{passive:false});
+        img.addEventListener("pointerdown",larssonHoldStart);
+        img.addEventListener("pointerup",larssonHoldEnd);
+        img.addEventListener("pointercancel",larssonHoldEnd);
+        img.addEventListener("pointerleave",larssonHoldEnd);
+        img.addEventListener("click",e=>{
+          if(larssonSuppress){e.preventDefault();return;}
+          larssonTap(img);
+          toggleBeerModeTap();
+        });
       });
     }
 
