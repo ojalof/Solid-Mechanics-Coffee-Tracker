@@ -87,6 +87,22 @@
     .muted { color: #718096; font-size: 14px; }
 
     .logout { position: absolute; top: 16px; right: 16px; }
+    .unit-mode-toggle { position:absolute; top:16px; left:16px; width:auto; padding:8px 12px; font-size:13px; margin:0; background:#0e7490; color:#fff; }
+    body.unit-mode { background:radial-gradient(circle at 50% 0%,rgba(34,211,238,.16),transparent 35%),linear-gradient(135deg,#071827 0%,#0b2940 55%,#06131f 100%); }
+    body.unit-mode .card { background:rgba(8,24,38,.96); color:#d9f7ff; border:1px solid rgba(34,211,238,.28); }
+    body.unit-mode h1,body.unit-mode h2 { color:#67e8f9; }
+    body.unit-mode .subtitle,body.unit-mode .muted { color:#9cc7d2; }
+    body.unit-mode .count { color:#67e8f9; }
+    body.unit-mode .coffee-btn,body.unit-mode .btn-primary { background:linear-gradient(180deg,#22d3ee,#0891b2);color:#04202a; }
+    body.unit-mode .tab { background:#102d40;color:#bcecf5; }
+    body.unit-mode .tab.active { background:#22d3ee;color:#04202a; }
+    body.unit-mode .leaderboard-item { background:#0c2232;color:#d9f7ff; }
+    body.unit-mode .leaderboard-item.me { background:#0e7490;color:#fff; }
+    body.unit-mode .history-item { border-bottom-color:rgba(34,211,238,.18); }
+    body.unit-mode .btn-danger { background:#123247;color:#bcecf5;border:1px solid rgba(34,211,238,.28); }
+    body.unit-mode .unit-mode-toggle { background:#e6f9fc;color:#07566c; }
+    .unit-description { max-width:600px;margin:2px auto 18px;text-align:center;line-height:1.5; }
+    .unit-equation { display:block;margin-top:5px;font-family:Georgia,"Times New Roman",serif;font-weight:700; }
 
     .coffee-counter { text-align: center; margin-top: 18px; }
     .count { font-size: 3.6em; font-weight: 800; color: #667eea; margin: 8px 0; }
@@ -304,6 +320,29 @@ begin
 end; $$;
 grant execute on function public.log_shared_coffee(text,text[]) to anon, authenticated;
 
+create table if not exists public.units_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+create index if not exists units_by_username_user_ts_idx on public.units_by_username (username,timestamp desc);
+alter table public.units_by_username enable row level security;
+drop policy if exists "read all units" on public.units_by_username;
+drop policy if exists "insert units" on public.units_by_username;
+drop policy if exists "update units" on public.units_by_username;
+drop policy if exists "delete units" on public.units_by_username;
+create policy "read all units" on public.units_by_username for select using (true);
+create policy "insert units" on public.units_by_username for insert with check (true);
+create policy "update units" on public.units_by_username for update using (true) with check (true);
+create policy "delete units" on public.units_by_username for delete using (true);
+create or replace function public.leaderboard_units_since(ts timestamptz)
+returns table (username text, coffees int) language sql security definer as $$
+ select u.username,count(*)::int as coffees
+ from public.units_by_username u where u.timestamp>=ts
+ group by u.username order by coffees desc;
+$$;
+grant execute on function public.leaderboard_units_since(timestamptz) to anon, authenticated;
+
 create table if not exists public.guinness_by_username (
   id uuid primary key default gen_random_uuid(),
   username text not null,
@@ -370,9 +409,14 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     <!-- APP -->
     <div id="app" class="hidden">
       <div class="card">
+        <button id="unitModeToggle" class="unit-mode-toggle hidden" onclick="toggleUnitMode()">💪 Unit Mode</button>
         <button class="btn-danger logout" onclick="logout()">Log out</button>
         <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
         <p class="subtitle">User: <span id="displayUsername"></span></p>
+        <div id="unitModeDescription" class="unit-description muted hidden">
+          A general-purpose mode for logging discrete units. One registration equals exactly one unit. What the unit represents is entirely up to you.
+          <span class="unit-equation">1 U ≡ 1 U. No conversions. No assumptions.</span>
+        </div>
 
         <div class="coffee-counter">
           <div class="muted" id="todayLabel">Coffees today</div>
@@ -496,7 +540,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v59-easter-egg-gesture-fix */
+    /* BUILD: v60-unit-mode-beer-only */
 
     let supabaseClient = null;
 
@@ -511,15 +555,19 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     const CAT_TREATS_PER_COFFEE = 1;
     const BEER_MODE_KEY = "beer_mode_enabled";
     const LARSSON_MODE_KEY = "larsson_mode_enabled";
+    const UNIT_MODE_KEY = "unit_mode_enabled";
     const COFFEE_TITLE = "Coffee Tracker";
     const BEER_TITLE = "Beer mode";
     const LARSSON_TITLE = "Larsson mode";
+    const UNIT_TITLE = "Unit Mode";
     const COFFEE_ICON_192 = "icons/icon-192.png";
     const COFFEE_ICON_512 = "icons/icon-512.png";
     const BEER_ICON_192 = "icons/icon_beermode_192.png";
     const BEER_ICON_512 = "icons/icon_beermode_512.png";
     const LARSSON_ICON_192 = "icons/icon_larsson_192.png";
     const LARSSON_ICON_512 = "icons/icon_larsson_512.png";
+    const UNIT_ICON_192 = "icons/icon_unit_192.png";
+    const UNIT_ICON_512 = "icons/icon_unit_512.png";
 
     let currentUsername = null;
     let currentLeaderboardView = "today";
@@ -534,16 +582,42 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       return String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     }
 
-    function isBeerMode() { return localStorage.getItem(BEER_MODE_KEY) === "1"; }
-    function isLarssonMode() { return localStorage.getItem(LARSSON_MODE_KEY) === "1"; }
-    function getActiveTable() { return isLarssonMode() ? "guinness_by_username" : (isBeerMode() ? "beers_by_username" : "coffees_by_username"); }
-    function getDrinkNamePlural() { return isLarssonMode() ? "Guinness" : (isBeerMode() ? "beers" : "coffees"); }
-    function getDrinkEmoji() { return isLarssonMode() ? "🍺" : (isBeerMode() ? "🍺" : "☕"); }
+    function isBeerMode(){return localStorage.getItem(BEER_MODE_KEY)==="1";}
+    function isLarssonMode(){return localStorage.getItem(LARSSON_MODE_KEY)==="1";}
+    function isUnitMode(){return localStorage.getItem(UNIT_MODE_KEY)==="1";}
+    function getActiveTable(){if(isUnitMode())return "units_by_username";if(isLarssonMode())return "guinness_by_username";return isBeerMode()?"beers_by_username":"coffees_by_username";}
+    function getDrinkNamePlural(){return isUnitMode()?"units":(isLarssonMode()?"Guinness":(isBeerMode()?"beers":"coffees"));}
+    function getDrinkEmoji(){return isUnitMode()?"U":(isLarssonMode()?"🍺":(isBeerMode()?"🍺":"☕"));}
+
+    function applyUnitMode(enabled){
+      localStorage.setItem(UNIT_MODE_KEY,enabled?"1":"0");
+      if(enabled){
+        localStorage.setItem(BEER_MODE_KEY,"0");
+        localStorage.setItem(LARSSON_MODE_KEY,"0");
+        document.body.classList.remove("beer-mode","larsson-mode");
+      }
+      document.body.classList.toggle("unit-mode",!!enabled);
+      document.querySelectorAll(".app-title").forEach(x=>x.textContent=enabled?UNIT_TITLE:COFFEE_TITLE);
+      document.querySelectorAll(".app-logo").forEach(img=>{
+        const hi=(img.getAttribute("src")||"").toLowerCase().includes("512");
+        img.src=enabled?(hi?UNIT_ICON_512:UNIT_ICON_192):(hi?COFFEE_ICON_512:COFFEE_ICON_192);
+      });
+      currentLeaderboardView="today";
+      document.querySelectorAll("#leaderboardTabs .tab").forEach(x=>x.classList.remove("active"));
+      document.querySelector('#leaderboardTabs .tab[data-view="today"]')?.classList.add("active");
+      refreshModeUI();
+      if(currentUsername&&supabaseClient&&!el("app")?.classList.contains("hidden"))loadData();
+    }
+    function toggleUnitMode(){
+      if(isUnitMode())resetToCoffeeMode(); else applyUnitMode(true);
+      if(currentUsername&&supabaseClient&&!el("app")?.classList.contains("hidden"))loadData();
+    }
 
     function resetToCoffeeMode() {
       localStorage.setItem(BEER_MODE_KEY, "0");
       localStorage.setItem(LARSSON_MODE_KEY, "0");
-      document.body.classList.remove("beer-mode", "larsson-mode");
+      localStorage.setItem(UNIT_MODE_KEY, "0");
+      document.body.classList.remove("beer-mode", "larsson-mode", "unit-mode");
       document.querySelectorAll(".app-title").forEach(x => x.textContent = COFFEE_TITLE);
       document.querySelectorAll(".app-logo").forEach(img => {
         const use512 = (img.getAttribute("src") || "").toLowerCase().includes("512");
@@ -553,27 +627,25 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       refreshModeUI();
     }
 
-    function refreshModeUI() {
-      const beer = isBeerMode();
-      const larsson = isLarssonMode();
-      const todayLabel = el("todayLabel"); if (todayLabel) todayLabel.textContent = larsson ? "Guinness today" : (beer ? "Beers today" : "Coffees today");
-      const addBtn = el("addDrinkBtn"); if (addBtn) addBtn.textContent = larsson ? "+ Add Guinness" : (beer ? "+ Add Beer" : "+ Add Coffee");
-      const removeBtn = el("removeCoffeeBtn"); if (removeBtn) removeBtn.textContent = larsson ? "– Remove last Guinness" : (beer ? "– Remove last beer" : "– Remove last coffee");
-      const histHeader = el("historyHeader"); if (histHeader) histHeader.textContent = larsson ? "Recent Guinness" : (beer ? "Recent beers" : "Recent coffees");
-      const lbHeader = el("leaderboardHeader"); if (lbHeader) lbHeader.textContent = larsson ? "🎩 Larssonboard" : (beer ? "🍺 Beerboard" : "🏆 Leaderboard");
-      document.querySelectorAll(".beer-only-tab").forEach(t => t.classList.toggle("hidden", !beer || larsson));
-      if ((!beer || larsson) && currentLeaderboardView === "lagrekord") {
-        currentLeaderboardView = "today";
-        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-        const todayTab = document.querySelector('.tab[data-view="today"]');
-        if (todayTab) todayTab.classList.add("active");
+    function refreshModeUI(){
+      const beer=isBeerMode(),larsson=isLarssonMode(),unit=isUnitMode();
+      if(el("todayLabel"))el("todayLabel").textContent=unit?"Units today":larsson?"Guinness today":beer?"Beers today":"Coffees today";
+      if(el("addDrinkBtn"))el("addDrinkBtn").textContent=unit?"+ Add Unit":larsson?"+ Add Guinness":beer?"+ Add Beer":"+ Add Coffee";
+      if(el("removeCoffeeBtn"))el("removeCoffeeBtn").textContent=unit?"– Remove last unit":larsson?"– Remove last Guinness":beer?"– Remove last beer":"– Remove last coffee";
+      if(el("historyHeader"))el("historyHeader").textContent=unit?"Recent units":larsson?"Recent Guinness":beer?"Recent beers":"Recent coffees";
+      if(el("leaderboardHeader"))el("leaderboardHeader").textContent=unit?"💪 Unitboard":larsson?"🎩 Larssonboard":beer?"🍺 Beerboard":"🏆 Leaderboard";
+      document.querySelectorAll(".beer-only-tab").forEach(x=>x.classList.toggle("hidden",!beer||larsson||unit));
+      if((!beer||larsson||unit)&&currentLeaderboardView==="lagrekord"){
+        currentLeaderboardView="today";
+        document.querySelectorAll("#leaderboardTabs .tab").forEach(x=>x.classList.remove("active"));
+        document.querySelector('#leaderboardTabs .tab[data-view="today"]')?.classList.add("active");
       }
-      const radarCard = el("coffeeRadarCard"); if (radarCard) radarCard.style.display = (beer || larsson) ? "none" : "";
-      const sharedBtn = el("sharedCoffeeBtn"); if (sharedBtn) sharedBtn.style.display = (beer || larsson) ? "none" : "";
-      const connectionsCard = el("coffeeConnectionsCard"); if (connectionsCard) connectionsCard.style.display = (beer || larsson) ? "none" : "";
-      const statsBtn = el("statsBtn"); if (statsBtn) statsBtn.style.display = (beer || larsson) ? "none" : "";
-      const plotBtn = el("plotBtn"); if (plotBtn) plotBtn.style.display = (beer || larsson) ? "none" : "";
-      if (beer || larsson) { if (typeof hideStats === "function") hideStats(); if (typeof hidePlot === "function") hidePlot(); }
+      const nonCoffee=beer||larsson||unit;
+      [["coffeeRadarCard",nonCoffee],["sharedCoffeeBtn",nonCoffee],["coffeeConnectionsCard",nonCoffee],["statsBtn",nonCoffee],["plotBtn",nonCoffee]].forEach(([id,hide])=>{const x=el(id);if(x)x.style.display=hide?"none":"";});
+      if(nonCoffee){if(typeof hideStats==="function")hideStats();if(typeof hidePlot==="function")hidePlot();}
+      el("unitModeDescription")?.classList.toggle("hidden",!unit);
+      const b=el("unitModeToggle");
+      if(b){b.classList.toggle("hidden",!(beer||unit));b.textContent=unit?"☕ Coffee Mode":"💪 Unit Mode";}
     }
 
     function hideAll() {
@@ -642,7 +714,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         .order("timestamp", { ascending: false }).limit(1);
       if (error) { console.error("removeLastCoffee select:", error); alert("Could not find last coffee."); return; }
       const last = (data || [])[0]; if (!last) return;
-      const ok = confirm("Remove your most recent " + (isLarssonMode() ? "Guinness" : (isBeerMode() ? "beer" : "coffee")) + " from today?");
+      const ok=confirm("Remove your most recent "+(isUnitMode()?"unit":isLarssonMode()?"Guinness":isBeerMode()?"beer":"coffee")+" from today?");
       if (!ok) return;
       const del = await supabaseClient.from(getActiveTable()).delete({ returning: "minimal" }).eq("id", last.id);
       if (del.error) { console.error("removeLastCoffee delete:", del.error); alert("Could not remove: " + String(del.error.message || del.error)); return; }
@@ -693,7 +765,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     // ── Shared Coffee + Coffee Connections ───────────────────────────────────────
     async function openSharedCoffee() {
-      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode() || isUnitMode()) return;
       el("sharedCoffeePanel")?.classList.remove("hidden");
       el("sharedCoffeeUsers").innerHTML = '<p class="muted">Laddar användare…</p>';
       const { data, error } = await supabaseClient.from("coffees_by_username").select("username");
@@ -730,7 +802,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
     async function loadCoffeeConnectionsPublic() {
       const box = el("connectionsPublicSummary");
-      if (!box || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      if (!box || !supabaseClient || isBeerMode() || isLarssonMode() || isUnitMode()) return;
       const [pr, tr] = await Promise.all([
         supabaseClient.from("shared_coffee_participants").select("event_id,username"),
         supabaseClient.from("coffees_by_username").select("id", { count: "exact", head: true }).gte("timestamp","2026-09-22T22:00:00.000Z")
@@ -794,7 +866,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       await loadCoffeeRadar();
     }
     async function loadCoffeeRadar() {
-      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode() || isUnitMode()) return;
       const { data, error } = await supabaseClient.from("coffee_radar").select("username,coffee_at,expires_at")
         .gt("expires_at", new Date().toISOString()).order("coffee_at", { ascending: true });
       if (error) { el("radarUsers").innerHTML = '<p class="muted">Coffee Radar är inte konfigurerad ännu.</p>'; return; }
@@ -814,7 +886,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       if (coffeeRadarTimer) clearInterval(coffeeRadarTimer);
       loadCoffeeRadar();
       coffeeRadarTimer = setInterval(() => {
-        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode() && !isLarssonMode()) loadCoffeeRadar();
+        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode() && !isLarssonMode() && !isUnitMode()) loadCoffeeRadar();
       }, 10000);
     }
 
@@ -824,7 +896,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       const { data, error } = await supabaseClient.from(getActiveTable()).select("id,timestamp")
         .eq("username", currentUsername).gte("timestamp", today.toISOString()).order("timestamp", { ascending: false });
       if (error) { console.error("loadData:", error); setMsg("loginMsg","Database error. Did you run the SQL? (Open with ?admin=1 to view it.)",true); show("login"); return; }
-      el("todayCount").textContent = (data||[]).length;
+      el("todayCount").textContent=isUnitMode()?`${(data||[]).length} U`:(data||[]).length;
       const rmBtn = el("removeCoffeeBtn");
       if (rmBtn) { const n = (data||[]).length; rmBtn.disabled = n < 1; rmBtn.style.opacity = n < 1 ? "0.5" : "1"; }
       el("history").innerHTML = (data||[]).slice(0,50).map(r => `<div class="history-item"><span>${getDrinkEmoji()}</span><span>${new Date(r.timestamp).toLocaleTimeString()}</span></div>`).join("")
@@ -876,7 +948,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       let rows = null;
       try {
-        const fn = isLarssonMode() ? "leaderboard_guinness_since" : (isBeerMode() ? "leaderboard_beer_since" : "leaderboard_username_since");
+        const fn=isUnitMode()?"leaderboard_units_since":isLarssonMode()?"leaderboard_guinness_since":isBeerMode()?"leaderboard_beer_since":"leaderboard_username_since";
         const { data, error } = await supabaseClient.rpc(fn, { ts: startDate.toISOString() });
         if (!error) rows = data;
       } catch (e) {}
@@ -1185,6 +1257,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 
     function applyLarssonMode(enabled, announce=true) {
       if (enabled) {
+        localStorage.setItem(UNIT_MODE_KEY,"0"); document.body.classList.remove("unit-mode");
         localStorage.setItem(BEER_MODE_KEY,"0");
         document.body.classList.remove("beer-mode");
       }
@@ -1213,6 +1286,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
 
     function applyBeerMode(enabled) {
       if (enabled) {
+        localStorage.setItem(UNIT_MODE_KEY,"0"); document.body.classList.remove("unit-mode");
         localStorage.setItem(LARSSON_MODE_KEY,"0");
         document.body.classList.remove("larsson-mode");
       }
