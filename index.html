@@ -1,188 +1,1328 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Coffee Tracker</title>
 
-  <title>Access Blocked</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#667eea">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("admin") === "1") {
+          window.__ADMIN__ = true;
+          document.addEventListener("DOMContentLoaded", function () {
+            var setup = document.getElementById("setup");
+            var login = document.getElementById("login");
+            var app = document.getElementById("app");
+            if (setup) setup.classList.remove("hidden");
+            if (login) login.classList.add("hidden");
+            if (app) app.classList.add("hidden");
+          });
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    html,
+    * { box-sizing: border-box; }
     body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
-      width: 100%;
-      min-height: 100%;
-    }
-
-    body {
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      background:
-        radial-gradient(
-          circle at 50% 35%,
-          #202020 0%,
-          #101010 35%,
-          #050505 75%,
-          #000000 100%
-        );
-
-      color: #f5f5f5;
-
-      font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        Arial,
-        sans-serif;
-
-      padding: 28px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
     }
+    .container { max-width: 900px; margin: 0 auto; }
+    .card {
+      background: rgba(255,255,255,0.95);
+      border-radius: 18px;
+      padding: 26px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      backdrop-filter: blur(10px);
+      position: relative;
+    }
+    h1 { margin: 0 0 8px 0; color: #2d3748; text-align: center; font-size: 2.3em; }
+    h2 { margin: 0 0 12px 0; color: #2d3748; }
+    .subtitle { text-align: center; color: #718096; margin-bottom: 18px; }
+    .hidden { display: none !important; }
 
-    .blocked {
+    input {
       width: 100%;
-      max-width: 680px;
-      text-align: center;
+      padding: 12px 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 16px;
+      margin: 10px 0;
     }
+    input:focus { outline: none; border-color: #667eea; }
 
-    .icon {
-      width: 92px;
-      height: 92px;
-
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      margin: 0 auto 28px;
-
-      border: 3px solid #d64545;
-      border-radius: 50%;
-
-      color: #d64545;
-      font-size: 48px;
-      font-weight: 700;
-    }
-
-    h1 {
-      margin: 0;
-
-      font-size: clamp(38px, 8vw, 68px);
-      line-height: 1.05;
-      letter-spacing: -2px;
-
-      color: #ffffff;
-    }
-
-    .reason {
-      color: #e05252;
-    }
-
-    .message {
-      margin: 28px auto 0;
-      max-width: 520px;
-
-      color: #999999;
-
-      font-size: 17px;
-      line-height: 1.7;
-    }
-
-    .divider {
-      width: 60px;
-      height: 1px;
-
-      margin: 34px auto;
-
-      background: #333333;
-    }
-
-    .code {
-      color: #555555;
-
-      font-family:
-        "SFMono-Regular",
-        Consolas,
-        "Liberation Mono",
-        monospace;
-
-      font-size: 12px;
-      letter-spacing: 1px;
-    }
-
-    .incident {
+    button {
+      width: 100%;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
       margin-top: 10px;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
 
-      color: #333333;
+    .btn-primary { background: #667eea; color: #fff; }
+    .btn-secondary { background: #48bb78; color: #fff; }
+    .btn-danger { background: #f56565; color: #fff; width: auto; padding: 8px 14px; font-size: 14px; }
 
-      font-family:
-        "SFMono-Regular",
-        Consolas,
-        monospace;
+    .msg { margin-top: 10px; font-size: 14px; }
+    .msg.error { color: #c53030; }
+    .msg.ok { color: #2f855a; }
+    .muted { color: #718096; font-size: 14px; }
 
-      font-size: 10px;
+    .logout { position: absolute; top: 16px; right: 16px; }
+
+    .coffee-counter { text-align: center; margin-top: 18px; }
+    .count { font-size: 3.6em; font-weight: 800; color: #667eea; margin: 8px 0; }
+    .coffee-btn { background: #48bb78; color: #fff; font-size: 1.15em; padding: 14px; }
+
+    .history-item {
+      display:flex; justify-content:space-between;
+      padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
     }
 
-    @media (max-width: 500px) {
-      body {
-        padding: 22px;
-      }
-
-      .icon {
-        width: 76px;
-        height: 76px;
-
-        font-size: 40px;
-      }
-
-      h1 {
-        letter-spacing: -1px;
-      }
-
-      .message {
-        font-size: 15px;
-      }
+    .leaderboard-item {
+      display:flex; justify-content:space-between;
+      padding: 10px 12px; background:#f7fafc; margin-bottom: 8px; border-radius: 10px;
     }
+    .leaderboard-item.me { background: #667eea; color: #fff; }
+
+    .tabs { display:flex; gap:10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 10px; border-radius: 10px; background:#e2e8f0; cursor:pointer; user-select:none;
+      flex: 1 1 110px; text-align:center;
+    }
+    .tab.active { background:#667eea; color:#fff; }
+
+    pre {
+      background:#f7fafc; padding: 12px; border-radius: 10px; overflow-x: auto;
+      font-size: 12px;
+    }
+
+    #statsText { font-size: 14px; line-height: 1.5; }
+
+    .brand { display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 8px; }
+    .brand-title { display:block; }
+
+    #caffeineCanvas { width: 100%; height: 46vh; max-height: 520px; min-height: 300px; display:block; }
+    @media (orientation: landscape) {
+      #caffeineCanvas { height: 70vh; max-height: 420px; min-height: 260px; }
+    }
+
+    body.beer-mode { background: linear-gradient(135deg, #f6ad55 0%, #dd6b20 100%); }
+    body.beer-mode .btn-primary { background: #dd6b20; }
+    body.beer-mode .count { color: #dd6b20; }
+    body.beer-mode .tab.active { background: #dd6b20; }
+    body.beer-mode .leaderboard-item.me { background: #dd6b20; }
+    /* Larsson Mode — The Secret Gentlemen's Society */
+    body.larsson-mode {
+      background:
+        radial-gradient(circle at 50% -10%, rgba(212,175,55,.16), transparent 34%),
+        linear-gradient(180deg,#050505 0%,#0b0b0b 55%,#000 100%);
+      color:#e8dfc5;
+    }
+    body.larsson-mode .card {
+      background:linear-gradient(145deg,rgba(20,20,20,.98),rgba(5,5,5,.99));
+      border:1px solid rgba(212,175,55,.42);
+      box-shadow:0 12px 38px rgba(0,0,0,.68), inset 0 0 0 1px rgba(255,215,90,.04);
+    }
+    body.larsson-mode h1, body.larsson-mode h2 { color:#d4af37; }
+    body.larsson-mode .app-title {
+      color:#d4af37;
+      font-family:Georgia,"Times New Roman",serif;
+      font-weight:700;
+      letter-spacing:.055em;
+      text-shadow:0 1px 0 #fff1a8,0 3px 14px rgba(212,175,55,.28);
+    }
+    body.larsson-mode .brand::after {
+      content:"✦ THE SECRET GENTLEMEN'S SOCIETY ✦";
+      display:block;
+      color:#9f8745;
+      font-family:Georgia,"Times New Roman",serif;
+      font-size:10px;
+      letter-spacing:.19em;
+      margin-top:1px;
+      text-align:center;
+    }
+    body.larsson-mode .subtitle, body.larsson-mode .muted { color:#aaa28e; }
+    body.larsson-mode .count { color:#d4af37; text-shadow:0 2px 14px rgba(212,175,55,.22); }
+    body.larsson-mode .coffee-btn, body.larsson-mode .btn-primary {
+      background:linear-gradient(180deg,#e0bd49,#9b7418);
+      color:#080808;
+      border:1px solid #e8c95b;
+      box-shadow:0 5px 18px rgba(0,0,0,.45);
+    }
+    body.larsson-mode .btn-danger {
+      background:#1b1b1b; color:#d4af37; border:1px solid rgba(212,175,55,.48);
+    }
+    body.larsson-mode .tab { background:#171717; color:#c9c0a8; border:1px solid rgba(212,175,55,.18); }
+    body.larsson-mode .tab.active { background:linear-gradient(180deg,#d4af37,#9b7418); color:#080808; }
+    body.larsson-mode .leaderboard-item { background:#111; color:#ddd3b8; border:1px solid rgba(212,175,55,.16); }
+    body.larsson-mode .leaderboard-item.me { background:linear-gradient(90deg,#5f4710,#9b7418); color:#fff4c5; border-color:#d4af37; }
+    body.larsson-mode .history-item { border-bottom-color:rgba(212,175,55,.16); color:#ddd3b8; }
+    body.larsson-mode .app-logo { filter:drop-shadow(0 7px 16px rgba(0,0,0,.7)) drop-shadow(0 0 9px rgba(212,175,55,.14)); }
+    .app-logo.larsson-armed { animation:larssonHint .45s ease-in-out 2; }
+    @keyframes larssonHint { 0%,100%{transform:rotate(0) scale(1)} 50%{transform:rotate(-4deg) scale(1.045)} }
+
+    .lagrekord-day {
+      margin-bottom: 16px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .lagrekord-day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(90deg, #f6ad55, #dd6b20);
+      color: #fff;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .lagrekord-day-header .day-total { font-size: 1.5em; font-weight: 800; }
+    .lagrekord-day-header .day-date { font-size: 13px; opacity: 0.85; font-weight: 500; }
+    .lagrekord-user-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: #fffaf5;
+      border-bottom: 1px solid #f6e8d8;
+      font-size: 14px;
+    }
+    .lagrekord-user-row:last-child { border-bottom: none; }
+    .lagrekord-user-row.is-me { background: #fff3e0; font-weight: 600; }
+    .lagrekord-user-name { color: #4a3222; }
+    .lagrekord-user-beers { color: #dd6b20; font-weight: 700; }
+    .lagrekord-medal { font-size: 1.3em; margin-right: 6px; }
+    #lagrekordEmpty { text-align: center; color: #718096; padding: 20px 0; }
+
+    .shared-coffee-btn { background:#805ad5; color:#fff; }
+    .shared-panel { margin-top:12px; padding:14px; background:#f7fafc; border-radius:12px; text-align:left; }
+    .shared-user-row { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid #e2e8f0; }
+    .shared-user-row input { width:auto; margin:0; }
+    .connection-row { display:flex; justify-content:space-between; padding:10px 12px; background:#f7fafc; border-radius:10px; margin-top:8px; }
+    .connections-toggle { background:#edf2f7; color:#2d3748; }
+    .connection-section-title { margin-top:16px; font-weight:700; color:#4a5568; }
+    .connections-public-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:12px 0; }
+    .connections-stat { background:#f7fafc; border-radius:10px; padding:10px; text-align:center; }
+    .connections-stat strong { display:block; font-size:1.35em; color:#667eea; }
+    .connections-highlight { background:#edf2ff; border-radius:10px; padding:11px 12px; margin:8px 0; }
+
+    .radar-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .radar-actions button { flex:1 1 120px; }
+    .radar-user { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f7fafc; border-radius:10px; margin-top:8px; }
+    .radar-user.me { background:#edf2ff; font-weight:700; }
+    .radar-status { font-size:13px; color:#718096; }
   </style>
 </head>
 
 <body>
+  <div class="container">
 
-  <main class="blocked">
+    <!-- SETUP (admin only: add ?admin=1) -->
+    <div id="setup" class="card hidden">
+      <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
+      <p class="subtitle">Admin setup (hidden)</p>
+      <p class="muted">This page is only shown when you open the app with <code>?admin=1</code>. Share the normal URL with friends.</p>
+      <h2 style="margin-top:16px;">SQL (run once)</h2>
+      <pre id="sqlBlock">
+-- Insecure username-only coffee tracker
+create table if not exists public.coffees_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
 
-    <div class="icon">
-      !
+create table if not exists public.coffee_radar (
+  username text primary key,
+  coffee_at timestamptz not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.coffee_radar enable row level security;
+drop policy if exists "read coffee radar" on public.coffee_radar;
+drop policy if exists "insert coffee radar" on public.coffee_radar;
+drop policy if exists "update coffee radar" on public.coffee_radar;
+drop policy if exists "delete coffee radar" on public.coffee_radar;
+create policy "read coffee radar" on public.coffee_radar for select using (true);
+create policy "insert coffee radar" on public.coffee_radar for insert with check (true);
+create policy "update coffee radar" on public.coffee_radar for update using (true) with check (true);
+create policy "delete coffee radar" on public.coffee_radar for delete using (true);
+
+create table if not exists public.shared_coffee_events (
+  id uuid primary key default gen_random_uuid(),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.shared_coffee_participants (
+  event_id uuid not null references public.shared_coffee_events(id) on delete cascade,
+  username text not null,
+  primary key (event_id, username)
+);
+alter table public.shared_coffee_events enable row level security;
+alter table public.shared_coffee_participants enable row level security;
+drop policy if exists "read shared coffee events" on public.shared_coffee_events;
+drop policy if exists "insert shared coffee events" on public.shared_coffee_events;
+create policy "read shared coffee events" on public.shared_coffee_events for select using (true);
+create policy "insert shared coffee events" on public.shared_coffee_events for insert with check (true);
+drop policy if exists "read shared coffee participants" on public.shared_coffee_participants;
+drop policy if exists "insert shared coffee participants" on public.shared_coffee_participants;
+create policy "read shared coffee participants" on public.shared_coffee_participants for select using (true);
+create policy "insert shared coffee participants" on public.shared_coffee_participants for insert with check (true);
+
+create or replace function public.log_shared_coffee(p_created_by text, p_usernames text[])
+returns uuid language plpgsql security definer set search_path=public as $$
+declare v_event_id uuid; v_names text[]; v_count int;
+begin
+  select array_agg(name order by name), count(*) into v_names, v_count
+  from (select distinct btrim(x) name from unnest(p_usernames) x where btrim(x) &lt;&gt; '') s;
+  if v_count &lt; 2 then raise exception 'At least two unique participants required'; end if;
+  if not (p_created_by = any(v_names)) then raise exception 'Creator must be participant'; end if;
+  insert into public.shared_coffee_events(created_by) values(p_created_by) returning id into v_event_id;
+  insert into public.shared_coffee_participants(event_id,username) select v_event_id, unnest(v_names);
+  insert into public.coffees_by_username(username) select unnest(v_names);
+  return v_event_id;
+end; $$;
+grant execute on function public.log_shared_coffee(text,text[]) to anon, authenticated;
+
+create table if not exists public.guinness_by_username (
+  id uuid primary key default gen_random_uuid(),
+  username text not null,
+  timestamp timestamptz not null default now()
+);
+create index if not exists guinness_by_username_user_ts_idx on public.guinness_by_username (username,timestamp desc);
+alter table public.guinness_by_username enable row level security;
+drop policy if exists "read all guinness" on public.guinness_by_username;
+drop policy if exists "insert guinness" on public.guinness_by_username;
+drop policy if exists "update guinness" on public.guinness_by_username;
+drop policy if exists "delete guinness" on public.guinness_by_username;
+create policy "read all guinness" on public.guinness_by_username for select using (true);
+create policy "insert guinness" on public.guinness_by_username for insert with check (true);
+create policy "update guinness" on public.guinness_by_username for update using (true) with check (true);
+create policy "delete guinness" on public.guinness_by_username for delete using (true);
+create or replace function public.leaderboard_guinness_since(ts timestamptz)
+returns table (username text, coffees int) language sql security definer as $$
+ select g.username,count(*)::int from public.guinness_by_username g where g.timestamp>=ts group by g.username order by count(*) desc;
+$$;
+grant execute on function public.leaderboard_guinness_since(timestamptz) to anon, authenticated;
+
+create index if not exists coffees_by_username_user_ts_idx
+  on public.coffees_by_username (username, timestamp desc);
+
+alter table public.coffees_by_username enable row level security;
+
+drop policy if exists "read all coffees" on public.coffees_by_username;
+drop policy if exists "insert coffees" on public.coffees_by_username;
+drop policy if exists "update coffees" on public.coffees_by_username;
+drop policy if exists "delete coffees" on public.coffees_by_username;
+
+create policy "read all coffees" on public.coffees_by_username for select using (true);
+create policy "insert coffees" on public.coffees_by_username for insert with check (true);
+create policy "update coffees" on public.coffees_by_username for update using (true) with check (true);
+create policy "delete coffees" on public.coffees_by_username for delete using (true);
+
+create or replace function public.leaderboard_username_since(ts timestamptz)
+returns table (username text, coffees int)
+language sql security definer as $$
+  select c.username, count(*)::int as coffees
+  from public.coffees_by_username c
+  where c.timestamp &gt;= ts
+  group by c.username
+  order by coffees desc;
+$$;
+grant execute on function public.leaderboard_username_since(timestamptz) to anon, authenticated;
+      </pre>
+      <button class="btn-secondary" onclick="copySQL()">Copy SQL</button>
+      <button class="btn-primary" onclick="goToApp()">Go to app</button>
+      <div id="setupMsg" class="msg"></div>
     </div>
 
-    <h1>
-      You have been blocked
-      <br>
-      <span class="reason">due to rasande.</span>
-    </h1>
-
-    <div class="message">
-      Access to Coffee Tracker has been suspended.
-      <br>
-      Please contact your administrator.
+    <!-- LOGIN -->
+    <div id="login" class="card">
+      <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
+      <p class="subtitle">Username-only (no password)</p>
+      <h2>Enter username</h2>
+      <p class="muted">This username is the key for all your data (intentionally insecure). Anyone who knows a username can use it.</p>
+      <input id="username" placeholder="Username (1–32 chars)"/>
+      <button class="btn-primary" onclick="doLogin()">Continue</button>
+      <div id="loginMsg" class="msg"></div>
     </div>
 
-    <div class="divider"></div>
+    <!-- APP -->
+    <div id="app" class="hidden">
+      <div class="card">
+        <button class="btn-danger logout" onclick="logout()">Log out</button>
+        <h1 class="brand"><img class="logo app-logo" src="icons/icon-192.png" alt="Coffee Tracker logo"><span class="brand-title app-title">Coffee Tracker</span></h1>
+        <p class="subtitle">User: <span id="displayUsername"></span></p>
 
-    <div class="code">
-      ERROR 403 · RASANDE_DETECTED
+        <div class="coffee-counter">
+          <div class="muted" id="todayLabel">Coffees today</div>
+          <div class="count" id="todayCount">0</div>
+          <button class="coffee-btn" id="addDrinkBtn" onclick="addCoffee()">+ Add Coffee</button>
+          <button class="shared-coffee-btn" id="sharedCoffeeBtn" onclick="openSharedCoffee()">👥 Gemensam kaffe</button>
+          <div id="sharedCoffeePanel" class="shared-panel hidden">
+            <strong>☕ Vilka dricker kaffe tillsammans?</strong>
+            <p class="muted">Du är alltid med. Välj minst en person till.</p>
+            <div id="sharedCoffeeUsers"></div>
+            <button class="btn-secondary" id="logSharedCoffeeBtn" onclick="logSharedCoffee()">☕ Logga gemensam kaffe</button>
+            <button class="connections-toggle" onclick="closeSharedCoffee()">Avbryt</button>
+            <div id="sharedCoffeeMsg" class="msg"></div>
+          </div>
+          <button id="removeCoffeeBtn" class="btn-danger" style="margin-top:10px; width:100%;" onclick="removeLastCoffee()" disabled>− Remove last coffee</button>
+          <button class="btn-primary" style="margin-top:12px;" id="statsBtn" onclick="showStats()">View Stats</button>
+          <button class="btn-primary" style="margin-top:10px;" id="plotBtn" onclick="showPlot()">📊 Plots</button>
+        </div>
+
+        <h2 style="margin-top:22px;" id="historyHeader">Recent coffees</h2>
+        <div id="history"></div>
+
+        <div id="statsCard" class="card hidden">
+          <button class="btn-danger logout" onclick="hideStats()">Close</button>
+          <h2 style="text-align:center; margin-top:6px;">📊 Your stats</h2>
+          <pre id="statsText"></pre>
+          <p class="muted" style="text-align:center; margin-top:10px;">Stats are calculated from your coffee history for the current username.</p>
+        </div>
+      </div>
+
+      <div class="card" id="coffeeRadarCard">
+        <h2>📡 Coffee Radar</h2>
+        <p class="muted">Se om någon annan är sugen på kaffe.</p>
+        <div id="radarInactive">
+          <button class="btn-primary" onclick="showRadarChoices()">☕ Jag är kaffesugen</button>
+        </div>
+        <div id="radarChoices" class="hidden">
+          <div class="radar-actions">
+            <button class="btn-secondary" onclick="activateCoffeeRadar(0)">Nu</button>
+            <button class="btn-secondary" onclick="activateCoffeeRadar(10)">Om 10 min</button>
+            <button class="btn-secondary" onclick="activateCoffeeRadar(30)">Om 30 min</button>
+          </div>
+        </div>
+        <div id="radarMyStatus" class="hidden"></div>
+        <div id="radarUsers" style="margin-top:12px;"></div>
+        <div id="radarMsg" class="msg"></div>
+      </div>
+
+      <div class="card" id="coffeeConnectionsCard">
+        <h2>🤝 Coffee Connections</h2>
+        <p class="muted">Hur socialt dricker vi vårt kaffe?</p>
+        <div id="connectionsPublicSummary"><p class="muted">Laddar community-statistik…</p></div>
+        <button class="connections-toggle" id="connectionsToggleBtn" onclick="toggleCoffeeConnections()">Visa alla Coffee Connections ›</button>
+        <div id="coffeeConnectionsContent" class="hidden">
+          <div id="connectionsSummary"></div>
+          <div id="connectionsList"></div>
+          <button class="connections-toggle" onclick="toggleCoffeeConnections(false)">Stäng</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 id="leaderboardHeader">🏆 Leaderboard</h2>
+        <div class="tabs" id="leaderboardTabs">
+          <div class="tab active" data-view="today" onclick="switchLeaderboard(event)">Today</div>
+          <div class="tab" data-view="week" onclick="switchLeaderboard(event)">This Week</div>
+          <div class="tab" data-view="month" onclick="switchLeaderboard(event)">This Month</div>
+          <div class="tab" data-view="all" onclick="switchLeaderboard(event)">All Time</div>
+          <div class="tab" data-view="maxday" onclick="switchLeaderboard(event)"><span id="maxdayTabText">Max/day</span></div>
+          <div class="tab beer-only-tab hidden" data-view="lagrekord" onclick="switchLeaderboard(event)">🏅 Hållfens lagrekord</div>
+        </div>
+        <div id="leaderboard"></div>
+      </div>
+
+      <div id="plotCard" class="card hidden">
+        <button class="btn-danger logout" onclick="hidePlot()">Close</button>
+        <h2 style="text-align:center; margin-top:6px;">📊 Plot-läge</h2>
+        <div class="tabs" style="margin-top:14px;">
+          <div class="tab active" id="caffeinePlotTab" onclick="switchPlotMode('caffeine')">☕ Koffeinplot</div>
+          <div class="tab" id="activityPlotTab" onclick="switchPlotMode('activity')">🗺️ Coffee Activity Map</div>
+          <div class="tab" id="densityPlotTab" onclick="switchPlotMode('density')">🌊 Coffee Density Plot</div>
+        </div>
+        <div id="caffeinePlotView">
+          <p class="muted" style="text-align:center; margin-top:6px;">Based on 70 mg/cup and a half-life of <span id="plotHalfLife"></span> h. X-axis is hours of the day (0–24).</p>
+          <canvas id="caffeineCanvas" style="width:100%; height:320px; display:block;"></canvas>
+          <p class="muted" style="text-align:center; margin-top:10px;">Rough estimate; absorption and individual variation are ignored.</p>
+        </div>
+        <div id="activityPlotView" class="hidden">
+          <p class="muted" style="text-align:center; margin-top:6px;">Varje punkt är en registrerad kaffe. X = klockslag, Y = datum.</p>
+          <select id="activityUserFocus" onchange="setActivityUserFocus(this.value)" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin:8px 0 12px;">
+            <option value="">Alla användare</option>
+          </select>
+          <div class="radar-actions" id="activityRangeControls" style="margin:0 0 12px;">
+            <button class="btn-primary activity-range-btn" data-days="30" onclick="setActivityRange(30)">30 dagar</button>
+            <button class="activity-range-btn" data-days="90" onclick="setActivityRange(90)">90 dagar</button>
+            <button class="activity-range-btn" data-days="183" onclick="setActivityRange(183)">6 månader</button>
+            <button class="activity-range-btn" data-days="all" onclick="setActivityRange('all')">All time</button>
+          </div>
+          <canvas id="activityCanvas" style="width:100%; height:55vh; max-height:620px; min-height:360px; display:block;"></canvas>
+          <p id="activityPlotNote" class="muted" style="text-align:center; margin-top:10px;"></p>
+        </div>
+        <div id="densityPlotView" class="hidden">
+          <p class="muted" style="text-align:center; margin-top:6px;">KDE-estimerad kaffetäthet över dygnets 24 timmar.</p>
+          <select id="densityUserFocus" onchange="setDensityUserFocus(this.value)" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin:8px 0 12px;"><option value="">Alla användare</option></select>
+          <canvas id="densityCanvas" style="width:100%; height:46vh; max-height:520px; min-height:320px; display:block;"></canvas>
+          <p id="densityPlotNote" class="muted" style="text-align:center; margin-top:10px;">
+          <details class="kde-math" style="margin-top:12px; background:#f7fafc; border-radius:10px; padding:10px 12px;">
+            <summary style="cursor:pointer; font-weight:700; color:#4a5568;">ƒ(t) Visa matematiken</summary>
+            <div style="margin-top:10px; font-size:14px; line-height:1.55; color:#4a5568;">
+              <div style="font-weight:700; margin-bottom:6px;">Kernel Density Estimation (KDE)</div>
+              <div style="overflow-x:auto; padding:8px 0; font-family:Georgia,'Times New Roman',serif; font-size:1.08em;">f̂(t) = 1/(n·h) Σᵢ K(d(t,tᵢ)/h)</div>
+              <div class="muted"><strong>n</strong> = antal kaffe · <strong>tᵢ</strong> = registrerad kaffetid · <strong>h</strong> = bandbredd (0,75 h) · <strong>K</strong> = Gaussisk kernel</div>
+              <div style="font-weight:700; margin-top:10px;">Cirkulärt 24 h-avstånd</div>
+              <div style="overflow-x:auto; padding:6px 0; font-family:Georgia,'Times New Roman',serif; font-size:1.08em;">d(t,tᵢ) = min(|t−tᵢ|, 24−|t−tᵢ|)</div>
+              <div style="margin-top:6px;"><strong>Tolkning:</strong> Varje ☕ skapar en liten Gaussisk puckel kring sin tidpunkt. Alla pucklar summeras till kurvan.</div>
+              <div class="muted" style="margin-top:8px; font-style:italic;">Statistiskt överkvalificerad metod för att ta reda på när folk går till kaffemaskinen.</div>
+            </div>
+          </details></p>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <div class="incident">
-      COFFEE TRACKER ACCESS CONTROL
-    </div>
+  <script>
+    /* BUILD: v59-easter-egg-gesture-fix */
 
-  </main>
+    let supabaseClient = null;
 
+    const SUPABASE_URL = "https://xifdmpdzaqbgrfsbzkvr.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_lpJAcX6Jv34NUsRcvcvLKw_m2baOZIz";
+
+    const SETUP_SQL = `-- See admin page (?admin=1) for full SQL`;
+
+    const CAFFEINE_MG_PER_CUP = 70;
+    const NOCCO_MG_PER_SERVING = 180;
+    const CAFFEINE_HALF_LIFE_HOURS = 5;
+    const CAT_TREATS_PER_COFFEE = 1;
+    const BEER_MODE_KEY = "beer_mode_enabled";
+    const LARSSON_MODE_KEY = "larsson_mode_enabled";
+    const COFFEE_TITLE = "Coffee Tracker";
+    const BEER_TITLE = "Beer mode";
+    const LARSSON_TITLE = "Larsson mode";
+    const COFFEE_ICON_192 = "icons/icon-192.png";
+    const COFFEE_ICON_512 = "icons/icon-512.png";
+    const BEER_ICON_192 = "icons/icon_beermode_192.png";
+    const BEER_ICON_512 = "icons/icon_beermode_512.png";
+    const LARSSON_ICON_192 = "icons/icon_larsson_192.png";
+    const LARSSON_ICON_512 = "icons/icon_larsson_512.png";
+
+    let currentUsername = null;
+    let currentLeaderboardView = "today";
+
+    function el(id) { return document.getElementById(id); }
+    function setMsg(id, text, isError=false) {
+      const node = el(id); if (!node) return;
+      node.textContent = text;
+      node.className = "msg " + (isError ? "error" : "ok");
+    }
+    function escapeHtml(v) {
+      return String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    function isBeerMode() { return localStorage.getItem(BEER_MODE_KEY) === "1"; }
+    function isLarssonMode() { return localStorage.getItem(LARSSON_MODE_KEY) === "1"; }
+    function getActiveTable() { return isLarssonMode() ? "guinness_by_username" : (isBeerMode() ? "beers_by_username" : "coffees_by_username"); }
+    function getDrinkNamePlural() { return isLarssonMode() ? "Guinness" : (isBeerMode() ? "beers" : "coffees"); }
+    function getDrinkEmoji() { return isLarssonMode() ? "🍺" : (isBeerMode() ? "🍺" : "☕"); }
+
+    function resetToCoffeeMode() {
+      localStorage.setItem(BEER_MODE_KEY, "0");
+      localStorage.setItem(LARSSON_MODE_KEY, "0");
+      document.body.classList.remove("beer-mode", "larsson-mode");
+      document.querySelectorAll(".app-title").forEach(x => x.textContent = COFFEE_TITLE);
+      document.querySelectorAll(".app-logo").forEach(img => {
+        const use512 = (img.getAttribute("src") || "").toLowerCase().includes("512");
+        img.setAttribute("src", use512 ? COFFEE_ICON_512 : COFFEE_ICON_192);
+        img.style.cursor = "pointer";
+      });
+      refreshModeUI();
+    }
+
+    function refreshModeUI() {
+      const beer = isBeerMode();
+      const larsson = isLarssonMode();
+      const todayLabel = el("todayLabel"); if (todayLabel) todayLabel.textContent = larsson ? "Guinness today" : (beer ? "Beers today" : "Coffees today");
+      const addBtn = el("addDrinkBtn"); if (addBtn) addBtn.textContent = larsson ? "+ Add Guinness" : (beer ? "+ Add Beer" : "+ Add Coffee");
+      const removeBtn = el("removeCoffeeBtn"); if (removeBtn) removeBtn.textContent = larsson ? "– Remove last Guinness" : (beer ? "– Remove last beer" : "– Remove last coffee");
+      const histHeader = el("historyHeader"); if (histHeader) histHeader.textContent = larsson ? "Recent Guinness" : (beer ? "Recent beers" : "Recent coffees");
+      const lbHeader = el("leaderboardHeader"); if (lbHeader) lbHeader.textContent = larsson ? "🎩 Larssonboard" : (beer ? "🍺 Beerboard" : "🏆 Leaderboard");
+      document.querySelectorAll(".beer-only-tab").forEach(t => t.classList.toggle("hidden", !beer || larsson));
+      if ((!beer || larsson) && currentLeaderboardView === "lagrekord") {
+        currentLeaderboardView = "today";
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        const todayTab = document.querySelector('.tab[data-view="today"]');
+        if (todayTab) todayTab.classList.add("active");
+      }
+      const radarCard = el("coffeeRadarCard"); if (radarCard) radarCard.style.display = (beer || larsson) ? "none" : "";
+      const sharedBtn = el("sharedCoffeeBtn"); if (sharedBtn) sharedBtn.style.display = (beer || larsson) ? "none" : "";
+      const connectionsCard = el("coffeeConnectionsCard"); if (connectionsCard) connectionsCard.style.display = (beer || larsson) ? "none" : "";
+      const statsBtn = el("statsBtn"); if (statsBtn) statsBtn.style.display = (beer || larsson) ? "none" : "";
+      const plotBtn = el("plotBtn"); if (plotBtn) plotBtn.style.display = (beer || larsson) ? "none" : "";
+      if (beer || larsson) { if (typeof hideStats === "function") hideStats(); if (typeof hidePlot === "function") hidePlot(); }
+    }
+
+    function hideAll() {
+      ["setup","login"].forEach(id => el(id)?.classList.add("hidden"));
+      el("app")?.classList.add("hidden");
+    }
+    function show(which) {
+      hideAll();
+      if (which === "login") { resetToCoffeeMode(); }
+      if (which === "app") el("app")?.classList.remove("hidden");
+      else el(which)?.classList.remove("hidden");
+    }
+    function validUsername(u) {
+      if (!u) return false;
+      const s = u.trim();
+      return s.length >= 1 && s.length <= 32 && !/[<>]/.test(s);
+    }
+
+    function showSetupAdmin() {
+      show("setup");
+      const pre = el("sqlBlock");
+      if (pre && (!pre.textContent || pre.textContent.trim().length === 0)) pre.textContent = SETUP_SQL;
+    }
+    async function copySQL() {
+      try { await navigator.clipboard.writeText(el("sqlBlock")?.textContent ?? ""); setMsg("setupMsg","SQL copied to clipboard.", false); }
+      catch { setMsg("setupMsg","Could not copy automatically.", true); }
+    }
+    function goToApp() { const u = new URL(window.location.href); u.searchParams.delete("admin"); window.location.href = u.toString(); }
+
+    function doLogin() {
+      resetToCoffeeMode();
+      const normalized = (el("username")?.value ?? "").trim();
+      if (!validUsername(normalized)) { setMsg("loginMsg","Invalid username (1–32 chars).", true); return; }
+      currentUsername = normalized;
+      localStorage.setItem("coffee_username", normalized);
+      showApp();
+    }
+    function logout() {
+      localStorage.removeItem("coffee_username");
+      currentUsername = null;
+      if (coffeeRadarTimer) { clearInterval(coffeeRadarTimer); coffeeRadarTimer = null; }
+      if (typeof hidePlot === "function") hidePlot();
+      resetToCoffeeMode();
+      show("login");
+    }
+    function showApp() {
+      el("displayUsername").textContent = currentUsername;
+      show("app"); refreshModeUI();
+      startCoffeeRadarPolling();
+      loadCoffeeConnectionsPublic();
+      loadData();
+    }
+
+    async function addCoffee() {
+      const { error } = await supabaseClient.from(getActiveTable()).insert([{ username: currentUsername }]);
+      if (error) { console.error("addCoffee:", error); alert("Could not add coffee. Check console."); return; }
+      await loadData();
+    }
+
+    async function removeLastCoffee() {
+      if (!currentUsername) return;
+      const today = new Date(); today.setHours(0,0,0,0);
+      const lookback = new Date(today.getTime() - 48 * 60 * 60 * 1000);
+      const { data, error } = await supabaseClient.from(getActiveTable()).select("id,timestamp")
+        .eq("username", currentUsername).gte("timestamp", lookback.toISOString())
+        .order("timestamp", { ascending: false }).limit(1);
+      if (error) { console.error("removeLastCoffee select:", error); alert("Could not find last coffee."); return; }
+      const last = (data || [])[0]; if (!last) return;
+      const ok = confirm("Remove your most recent " + (isLarssonMode() ? "Guinness" : (isBeerMode() ? "beer" : "coffee")) + " from today?");
+      if (!ok) return;
+      const del = await supabaseClient.from(getActiveTable()).delete({ returning: "minimal" }).eq("id", last.id);
+      if (del.error) { console.error("removeLastCoffee delete:", del.error); alert("Could not remove: " + String(del.error.message || del.error)); return; }
+      await loadData();
+    }
+
+    // ── Paginated fetch helpers ──────────────────────────────────────────────────
+    // Supabase caps single queries at 1000 rows. These helpers page through all
+    // data so the activity map, density plot, and max/day leaderboard are complete.
+
+    async function fetchAllCoffeeTimestampsForUser(username) {
+      const PAGE_SIZE = 1000; const allRows = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabaseClient.from("coffees_by_username").select("timestamp")
+          .eq("username", username).order("timestamp", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        const page = data || []; allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+      return { data: allRows, error: null };
+    }
+
+    async function fetchAllActiveDrinksAllUsers() {
+      const PAGE_SIZE = 1000; const allRows = [];
+      const table = getActiveTable();
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabaseClient.from(table)
+          .select("username,timestamp").order("timestamp", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        const page = data || []; allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+      return { data: allRows, error: null };
+    }
+
+    async function fetchAllCoffeesAllUsers() {
+      const PAGE_SIZE = 1000; const allRows = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await supabaseClient.from("coffees_by_username")
+          .select("username,timestamp").order("timestamp", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        const page = data || []; allRows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+      return { data: allRows, error: null };
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
+    // ── Shared Coffee + Coffee Connections ───────────────────────────────────────
+    async function openSharedCoffee() {
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      el("sharedCoffeePanel")?.classList.remove("hidden");
+      el("sharedCoffeeUsers").innerHTML = '<p class="muted">Laddar användare…</p>';
+      const { data, error } = await supabaseClient.from("coffees_by_username").select("username");
+      if (error) { el("sharedCoffeeUsers").innerHTML = '<p class="muted">Kunde inte ladda användare.</p>'; return; }
+      let users = [...new Set((data||[]).map(r => (r.username||"").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"sv"));
+      users = [currentUsername, ...users.filter(u => u !== currentUsername)];
+      el("sharedCoffeeUsers").innerHTML = users.map(u => {
+        const me = u === currentUsername;
+        return `<label class="shared-user-row"><input type="checkbox" class="shared-coffee-user" value="${escapeHtml(u)}" ${me?"checked disabled":""}><span>${escapeHtml(u)}${me?" (du)":""}</span></label>`;
+      }).join("");
+    }
+    function closeSharedCoffee() { el("sharedCoffeePanel")?.classList.add("hidden"); }
+
+    async function logSharedCoffee() {
+      let selected = [...document.querySelectorAll(".shared-coffee-user:checked")].map(x => x.value.trim()).filter(Boolean);
+      selected.push(currentUsername);
+      const participants = [...new Set(selected)];
+      if (participants.length < 2) { setMsg("sharedCoffeeMsg","Välj minst en person till.",true); return; }
+      const b = el("logSharedCoffeeBtn"); if (b) b.disabled = true;
+      const { error } = await supabaseClient.rpc("log_shared_coffee", { p_created_by: currentUsername, p_usernames: participants });
+      if (b) b.disabled = false;
+      if (error) { console.error(error); setMsg("sharedCoffeeMsg","Kunde inte logga. Kör den uppdaterade SQL-koden.",true); return; }
+      closeSharedCoffee(); await loadData(); await loadCoffeeConnectionsPublic();
+      if (!el("coffeeConnectionsContent")?.classList.contains("hidden")) await loadCoffeeConnections();
+    }
+
+    async function toggleCoffeeConnections(forceOpen) {
+      const c = el("coffeeConnectionsContent"); if (!c) return;
+      const open = typeof forceOpen === "boolean" ? forceOpen : c.classList.contains("hidden");
+      c.classList.toggle("hidden", !open);
+      el("connectionsToggleBtn").textContent = open ? "Dölj Coffee Connections ⌃" : "Visa alla Coffee Connections ›";
+      if (open) await loadCoffeeConnections();
+    }
+
+    async function loadCoffeeConnectionsPublic() {
+      const box = el("connectionsPublicSummary");
+      if (!box || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      const [pr, tr] = await Promise.all([
+        supabaseClient.from("shared_coffee_participants").select("event_id,username"),
+        supabaseClient.from("coffees_by_username").select("id", { count: "exact", head: true }).gte("timestamp","2026-09-22T22:00:00.000Z")
+      ]);
+      if (pr.error) { box.innerHTML = '<p class="muted">Community-statistik blir tillgänglig när Coffee Connections är konfigurerad.</p>'; return; }
+      const events = {}; for (const r of pr.data||[]) (events[r.event_id] ??= new Set()).add(r.username);
+      const pairs = {}, people = new Set(); let shared = 0, biggest = 0;
+      for (const set of Object.values(events)) {
+        const n = [...set].sort((a,b) => a.localeCompare(b,"sv")); biggest = Math.max(biggest, n.length); shared += n.length;
+        n.forEach(x => people.add(x));
+        for (let i = 0; i < n.length; i++) for (let j = i+1; j < n.length; j++) { const k = n[i]+"|||"+n[j]; pairs[k] = (pairs[k]||0)+1; }
+      }
+      const rows = Object.entries(pairs).map(([k,count]) => { const [a,b] = k.split("|||"); return {a,b,count}; }).sort((x,y) => y.count-x.count);
+      const total = tr.count||0, pct = total ? Math.round(shared/total*100) : 0, top = rows[0];
+      box.innerHTML = `<div class="connections-public-grid">
+        <div class="connections-stat"><strong>${Object.keys(events).length}</strong><span class="muted">gemensamma fikastunder</span></div>
+        <div class="connections-stat"><strong>${rows.length}</strong><span class="muted">unika connections</span></div>
+        <div class="connections-stat"><strong>${pct}%</strong><span class="muted">av kaffet dricks tillsammans<br><small>sedan 23 sep 2026</small></span></div>
+        <div class="connections-stat"><strong>${people.size}</strong><span class="muted">sociala kaffedrickare</span></div></div>
+        <div class="connections-highlight">🔥 <strong>Mest etablerade connection:</strong> ${top?`${escapeHtml(top.a)} + ${escapeHtml(top.b)} — ${top.count} ☕`:"Ingen ännu"}</div>
+        <div class="connections-highlight">👥 <strong>Största gemensamma fikan:</strong> ${biggest?`${biggest} personer`:"Ingen ännu"}</div>`;
+    }
+
+    async function loadCoffeeConnections() {
+      const s = el("connectionsSummary"), l = el("connectionsList");
+      s.innerHTML = '<p class="muted">Laddar connections…</p>'; l.innerHTML = "";
+      const { data, error } = await supabaseClient.from("shared_coffee_participants").select("event_id,username");
+      if (error) { s.innerHTML = '<p class="muted">Coffee Connections är inte konfigurerad ännu.</p>'; return; }
+      const events = {};
+      for (const r of data||[]) (events[r.event_id] ??= new Set()).add(r.username);
+      const pairs = {}; let myEvents = 0; const myPeople = new Set();
+      for (const set of Object.values(events)) {
+        const n = [...set].sort((a,b) => a.localeCompare(b,"sv"));
+        if (n.includes(currentUsername)) { myEvents++; n.filter(x => x !== currentUsername).forEach(x => myPeople.add(x)); }
+        for (let i = 0; i < n.length; i++) for (let j = i+1; j < n.length; j++) { const k = n[i]+"|||"+n[j]; pairs[k] = (pairs[k]||0)+1; }
+      }
+      const rows = Object.entries(pairs).map(([k,count]) => { const [a,b] = k.split("|||"); return {a,b,count,mine:a===currentUsername||b===currentUsername}; }).sort((x,y) => y.count-x.count);
+      s.innerHTML = `<p class="muted">Dina gemensamma kaffestunder: <strong>${myEvents}</strong> · Personer du fikat med: <strong>${myPeople.size}</strong></p>`;
+      const render = a => a.length ? a.map(r => `<div class="connection-row"><span>${escapeHtml(r.a)} + ${escapeHtml(r.b)}</span><strong>${r.count} ☕</strong></div>`).join("") : '<p class="muted">Inga gemensamma kaffe ännu.</p>';
+      l.innerHTML = '<div class="connection-section-title">Dina connections</div>' + render(rows.filter(r => r.mine)) + '<div class="connection-section-title">Alla connections</div>' + render(rows);
+    }
+
+    // ── Coffee Radar ─────────────────────────────────────────────────────────────
+    let coffeeRadarTimer = null;
+    function showRadarChoices() { el("radarChoices")?.classList.remove("hidden"); }
+    function radarTimeLabel(coffeeAt) {
+      const mins = Math.round((new Date(coffeeAt).getTime() - Date.now()) / 60000);
+      if (mins <= 2) return "Nu"; if (mins <= 12) return "Om 10 min"; return "Om " + mins + " min";
+    }
+    async function activateCoffeeRadar(delayMinutes) {
+      if (!currentUsername || !supabaseClient) return;
+      const now = new Date(), coffeeAt = new Date(now.getTime() + delayMinutes*60000), expiresAt = new Date(coffeeAt.getTime() + 60*60000);
+      const { error } = await supabaseClient.from("coffee_radar").upsert([{ username: currentUsername, coffee_at: coffeeAt.toISOString(), expires_at: expiresAt.toISOString(), updated_at: now.toISOString() }], { onConflict: "username" });
+      if (error) { console.error("coffee radar activate:", error); setMsg("radarMsg","Kunde inte aktivera Coffee Radar.",true); return; }
+      el("radarChoices")?.classList.add("hidden"); await loadCoffeeRadar();
+    }
+    async function deactivateCoffeeRadar() {
+      if (!currentUsername || !supabaseClient) return;
+      const { error } = await supabaseClient.from("coffee_radar").delete().eq("username", currentUsername);
+      if (error) { console.error("coffee radar deactivate:", error); setMsg("radarMsg","Kunde inte avsluta Coffee Radar.",true); return; }
+      await loadCoffeeRadar();
+    }
+    async function loadCoffeeRadar() {
+      if (!currentUsername || !supabaseClient || isBeerMode() || isLarssonMode()) return;
+      const { data, error } = await supabaseClient.from("coffee_radar").select("username,coffee_at,expires_at")
+        .gt("expires_at", new Date().toISOString()).order("coffee_at", { ascending: true });
+      if (error) { el("radarUsers").innerHTML = '<p class="muted">Coffee Radar är inte konfigurerad ännu.</p>'; return; }
+      const rows = data||[], mine = rows.find(r => r.username === currentUsername);
+      const inactive = el("radarInactive"), myStatus = el("radarMyStatus");
+      if (mine) {
+        inactive?.classList.add("hidden");
+        if (myStatus) { myStatus.classList.remove("hidden"); myStatus.innerHTML = `<div class="radar-user me"><span>☕ Du är synlig: ${radarTimeLabel(mine.coffee_at)}</span><button class="btn-danger" style="margin:0;" onclick="deactivateCoffeeRadar()">Avsluta</button></div>`; }
+      } else { inactive?.classList.remove("hidden"); myStatus?.classList.add("hidden"); }
+      const others = rows.filter(r => r.username !== currentUsername);
+      el("radarUsers").innerHTML = others.length
+        ? others.map(r => `<div class="radar-user"><span>🟢 ${r.username}</span><span class="radar-status">${radarTimeLabel(r.coffee_at)}</span></div>`).join("")
+        : '<p class="muted" style="text-align:center;">📡 Scannar efter kaffesugna kollegor…</p>';
+      setMsg("radarMsg","",false);
+    }
+    function startCoffeeRadarPolling() {
+      if (coffeeRadarTimer) clearInterval(coffeeRadarTimer);
+      loadCoffeeRadar();
+      coffeeRadarTimer = setInterval(() => {
+        if (currentUsername && !el("app")?.classList.contains("hidden") && !isBeerMode() && !isLarssonMode()) loadCoffeeRadar();
+      }, 10000);
+    }
+
+    // ── Main data ────────────────────────────────────────────────────────────────
+    async function loadData() {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const { data, error } = await supabaseClient.from(getActiveTable()).select("id,timestamp")
+        .eq("username", currentUsername).gte("timestamp", today.toISOString()).order("timestamp", { ascending: false });
+      if (error) { console.error("loadData:", error); setMsg("loginMsg","Database error. Did you run the SQL? (Open with ?admin=1 to view it.)",true); show("login"); return; }
+      el("todayCount").textContent = (data||[]).length;
+      const rmBtn = el("removeCoffeeBtn");
+      if (rmBtn) { const n = (data||[]).length; rmBtn.disabled = n < 1; rmBtn.style.opacity = n < 1 ? "0.5" : "1"; }
+      el("history").innerHTML = (data||[]).slice(0,50).map(r => `<div class="history-item"><span>${getDrinkEmoji()}</span><span>${new Date(r.timestamp).toLocaleTimeString()}</span></div>`).join("")
+        || `<p class="muted" style="text-align:center; margin-top:10px;">No ${getDrinkNamePlural()} yet today.</p>`;
+      await loadLeaderboard();
+    }
+
+    function switchLeaderboard(evt) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      evt.target.classList.add("active");
+      currentLeaderboardView = evt.target.getAttribute("data-view");
+      loadLeaderboard();
+    }
+
+    async function loadLeaderboard() {
+      if (currentLeaderboardView === "lagrekord") { await loadLagrekord(); return; }
+
+      // Max/day: needs full dataset — use paginated fetch
+      if (currentLeaderboardView === "maxday") {
+        const { data, error } = await fetchAllActiveDrinksAllUsers();
+        if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load max/day leaderboard.</p>`; return; }
+        const perUserDay = {};
+        for (const r of (data||[])) {
+          const d = new Date(r.timestamp);
+          const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const key = `${r.username}|||${dayKey}`;
+          perUserDay[key] = (perUserDay[key]||0) + 1;
+        }
+        const maxByUser = {};
+        for (const key in perUserDay) {
+          const [username, day] = key.split("|||"); const c = perUserDay[key];
+          if (!maxByUser[username] || c > maxByUser[username].coffees) maxByUser[username] = { coffees: c, day };
+        }
+        const rows = Object.entries(maxByUser).map(([username, obj]) => ({ username, coffees: obj.coffees, day: obj.day })).sort((a,b) => b.coffees-a.coffees||a.username.localeCompare(b.username));
+        el("leaderboard").innerHTML = rows.slice(0,50).map((row,idx) => {
+          const isMe = row.username === currentUsername;
+          return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${row.username} ${isMe?"(You)":""} <span class="muted" style="font-size:12px;${isMe?"color:rgba(255,255,255,0.85);":""}">(${row.day})</span></span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
+        }).join("") || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
+        return;
+      }
+
+      let startDate = new Date();
+      switch (currentLeaderboardView) {
+        case "today": startDate.setHours(0,0,0,0); break;
+        case "week": startDate.setDate(startDate.getDate()-7); break;
+        case "month": startDate.setMonth(startDate.getMonth()-1); break;
+        case "all": startDate = new Date("2000-01-01"); break;
+      }
+
+      let rows = null;
+      try {
+        const fn = isLarssonMode() ? "leaderboard_guinness_since" : (isBeerMode() ? "leaderboard_beer_since" : "leaderboard_username_since");
+        const { data, error } = await supabaseClient.rpc(fn, { ts: startDate.toISOString() });
+        if (!error) rows = data;
+      } catch (e) {}
+
+      if (!rows) {
+        const { data, error } = await supabaseClient.from(getActiveTable()).select("username").gte("timestamp", startDate.toISOString());
+        if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load leaderboard.</p>`; return; }
+        const counts = {};
+        (data||[]).forEach(r => counts[r.username] = (counts[r.username]||0)+1);
+        rows = Object.entries(counts).map(([username,coffees]) => ({ username, coffees })).sort((a,b) => b.coffees-a.coffees);
+      }
+
+      el("leaderboard").innerHTML = (rows||[]).slice(0,50).map((row,idx) => {
+        const isMe = row.username === currentUsername;
+        return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${row.username} ${isMe?"(You)":""}</span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
+      }).join("") || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
+    }
+
+    async function loadLagrekord() {
+      el("leaderboard").innerHTML = `<p class="muted" style="text-align:center; padding:16px 0;">Laddar rekord…</p>`;
+      const { data, error } = await supabaseClient.from(getActiveTable()).select("username,timestamp");
+      if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Kunde inte ladda rekord.</p>`; return; }
+      if (!data||!data.length) { el("leaderboard").innerHTML = `<p id="lagrekordEmpty">Inga öl registrerade än. Börja dricka! 🍺</p>`; return; }
+      const byDay = {};
+      for (const r of data) {
+        const d = new Date(r.timestamp);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!byDay[dayKey]) byDay[dayKey] = { total: 0, users: {} };
+        byDay[dayKey].total += 1; byDay[dayKey].users[r.username] = (byDay[dayKey].users[r.username]||0)+1;
+      }
+      const sortedDays = Object.entries(byDay).sort((a,b) => b[1].total-a[1].total||b[0].localeCompare(a[0]));
+      const medals = ["🥇","🥈","🥉"];
+      el("leaderboard").innerHTML = sortedDays.slice(0,20).map(([dayKey,info],idx) => {
+        const [yr,mo,dy] = dayKey.split("-");
+        const dateObj = new Date(Number(yr),Number(mo)-1,Number(dy));
+        const dayName = dateObj.toLocaleDateString("sv-SE",{weekday:"long"});
+        const dateStr = dateObj.toLocaleDateString("sv-SE",{year:"numeric",month:"long",day:"numeric"});
+        const capitalDay = dayName.charAt(0).toUpperCase()+dayName.slice(1);
+        const medal = medals[idx] ?? `${idx+1}.`;
+        const userRows = Object.entries(info.users).sort((a,b) => b[1]-a[1]).map(([uname,count]) => {
+          const isMe = uname === currentUsername;
+          return `<div class="lagrekord-user-row${isMe?" is-me":""}"><span class="lagrekord-user-name">${isMe?"👤 ":""}${uname}${isMe?" (du)":""}</span><span class="lagrekord-user-beers">${count} 🍺</span></div>`;
+        }).join("");
+        return `<div class="lagrekord-day"><div class="lagrekord-day-header"><span><span class="lagrekord-medal">${medal}</span>${capitalDay}<span class="day-date" style="margin-left:8px;">${dateStr}</span></span><span class="day-total">${info.total} 🍺</span></div>${userRows}</div>`;
+      }).join("");
+    }
+
+    // ── Stats ────────────────────────────────────────────────────────────────────
+    function hideStats() { el("statsCard")?.classList.add("hidden"); }
+
+    async function showStats() {
+      el("statsText").textContent = "Loading stats…";
+      el("statsCard")?.classList.remove("hidden");
+      const { data, error } = await fetchAllCoffeeTimestampsForUser(currentUsername);
+      if (error) { el("statsText").textContent = `Could not load stats.\n\nError: ${error.message||error}`; return; }
+      const rows = data||[], total = rows.length;
+      let solidMechanicsTotal = null;
+      try { const res = await supabaseClient.from("coffees_by_username").select("id",{count:"exact",head:true}); if (!res.error) solidMechanicsTotal = res.count; } catch(e) {}
+      if (total === 0) { el("statsText").textContent = `Total coffees: 0\nSolid Mechanics total: ${solidMechanicsTotal??"?"}\nTracking since: (no data)`; return; }
+      const firstTs = new Date(rows[0].timestamp);
+      const firstDate = new Date(firstTs.getFullYear(),firstTs.getMonth(),firstTs.getDate());
+      const now = new Date(), todayDate = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      const msPerDay = 24*60*60*1000;
+      const daysTracked = Math.max(1,Math.floor((todayDate-firstDate)/msPerDay)+1);
+      const avgPerDay = total/daysTracked;
+      const countsByDay = {};
+      for (const r of rows) {
+        const d = new Date(r.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        countsByDay[key] = (countsByDay[key]||0)+1;
+      }
+      let maxInDay = 0; for (const k in countsByDay) if (countsByDay[k] > maxInDay) maxInDay = countsByDay[k];
+      const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`;
+      const todayCount = countsByDay[todayKey]||0;
+      let coffeesPerHourToday = 0;
+      if (todayCount > 0) {
+        const todayTimes = rows.map(r => new Date(r.timestamp)).filter(d => d.getFullYear()===todayDate.getFullYear()&&d.getMonth()===todayDate.getMonth()&&d.getDate()===todayDate.getDate()).map(d => d.getTime());
+        const firstTodayMs = Math.min(...todayTimes);
+        coffeesPerHourToday = todayCount/Math.max(0.25,(now.getTime()-firstTodayMs)/(60*60*1000));
+      }
+      const nowMs = now.getTime(), halfLifeMs = CAFFEINE_HALF_LIFE_HOURS*60*60*1000, ln2 = Math.LN2;
+      let caffeineRemainingMg = 0;
+      for (const r of rows) { const dt = Math.max(0,nowMs-new Date(r.timestamp).getTime()); caffeineRemainingMg += CAFFEINE_MG_PER_CUP*Math.exp(-ln2*(dt/halfLifeMs)); }
+      const noccoEqToday = todayCount*CAFFEINE_MG_PER_CUP/NOCCO_MG_PER_SERVING;
+      const noccoEqAvg = avgPerDay*CAFFEINE_MG_PER_CUP/NOCCO_MG_PER_SERVING;
+      const noccoEqRemaining = caffeineRemainingMg/NOCCO_MG_PER_SERVING;
+      let timeToZeroHours = 0;
+      if (caffeineRemainingMg > 1) timeToZeroHours = CAFFEINE_HALF_LIFE_HOURS*(Math.log(caffeineRemainingMg/1)/Math.LN2);
+      const ttMins = Math.max(0,Math.round(timeToZeroHours*60));
+      const startStr = `${firstDate.getFullYear()}-${String(firstDate.getMonth()+1).padStart(2,'0')}-${String(firstDate.getDate()).padStart(2,'0')}`;
+      el("statsText").textContent = `Total coffees: ${total}
+Solid Mechanics total: ${solidMechanicsTotal??"?"}
+Tracking since: ${startStr} (${daysTracked} days)
+Average per day: ${avgPerDay.toFixed(1)}
+Max in a day: ${maxInDay}
+Today: ${todayCount}
+Coffees per hour today: ${coffeesPerHourToday.toFixed(2)}
+
+Caffeine (70 mg/cup):
+• Today: ${(todayCount*CAFFEINE_MG_PER_CUP).toFixed(0)} mg
+• Average/day: ${(avgPerDay*CAFFEINE_MG_PER_CUP).toFixed(0)} mg
+
+NOCCO equivalent (180 mg/serving):
+• Today: ${noccoEqToday.toFixed(2)} servings
+• Average/day: ${noccoEqAvg.toFixed(2)} servings
+
+Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
+• Remaining: ${caffeineRemainingMg.toFixed(0)} mg
+• NOCCO equivalent: ${noccoEqRemaining.toFixed(2)} servings
+• Time until ~0% (<1 mg): ${Math.floor(ttMins/60)}h ${String(ttMins%60).padStart(2,'0')}m`;
+    }
+
+    // ── Plots ────────────────────────────────────────────────────────────────────
+    let lastPlotTimestampsMs = [], lastPlotNote = "", plotRedrawTimer = null;
+    let currentPlotMode = "caffeine", lastActivityRows = [];
+    let activityUserFocus = "", densityUserFocus = "", activityRangeDays = 30;
+
+    function setDensityUserFocus(username) { densityUserFocus = username||""; drawDensityPlot(lastActivityRows||[]); }
+    function refreshDensityUserFocus(rows) {
+      const s = el("densityUserFocus"); if (!s) return;
+      const users = [...new Set((rows||[]).map(r=>r.username).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"sv"));
+      s.innerHTML = '<option value="">Alla användare</option>'+users.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}${u===currentUsername?' (du)':''}</option>`).join('');
+      if (users.includes(densityUserFocus)) s.value = densityUserFocus; else densityUserFocus = "";
+    }
+
+    function setActivityRange(days) {
+      activityRangeDays = days === "all" ? "all" : Number(days);
+      document.querySelectorAll(".activity-range-btn").forEach(btn => {
+        const raw = btn.getAttribute("data-days");
+        const active = (activityRangeDays === "all" && raw === "all") || (activityRangeDays !== "all" && Number(raw) === activityRangeDays);
+        btn.classList.toggle("btn-primary", active);
+      });
+      drawActivityMap(lastActivityRows||[]);
+    }
+
+    function filterActivityRowsByRange(rows) {
+      if (activityRangeDays === "all" || !(rows||[]).length) return rows||[];
+      const cutoffMs = Date.now() - Number(activityRangeDays)*24*60*60*1000;
+      return rows.filter(r => { const ts = new Date(r.timestamp).getTime(); return Number.isFinite(ts) && ts >= cutoffMs; });
+    }
+
+    function setActivityUserFocus(username) { activityUserFocus = username||""; drawActivityMap(lastActivityRows||[]); }
+    function refreshActivityUserFocus(rows) {
+      const select = el("activityUserFocus"); if (!select) return;
+      const users = [...new Set((rows||[]).map(r=>r.username).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"sv"));
+      const selected = activityUserFocus;
+      select.innerHTML = '<option value="">Alla användare</option>'+users.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}${u===currentUsername?" (du)":""}</option>`).join("");
+      if (users.includes(selected)) select.value = selected; else activityUserFocus = "";
+    }
+
+    function hidePlot() { el("plotCard")?.classList.add("hidden"); }
+
+    async function switchPlotMode(mode) {
+      currentPlotMode = ["activity","density"].includes(mode) ? mode : "caffeine";
+      el("caffeinePlotView")?.classList.toggle("hidden", currentPlotMode !== "caffeine");
+      el("activityPlotView")?.classList.toggle("hidden", currentPlotMode !== "activity");
+      el("densityPlotView")?.classList.toggle("hidden", currentPlotMode !== "density");
+      el("caffeinePlotTab")?.classList.toggle("active", currentPlotMode === "caffeine");
+      el("activityPlotTab")?.classList.toggle("active", currentPlotMode === "activity");
+      el("densityPlotTab")?.classList.toggle("active", currentPlotMode === "density");
+      if (currentPlotMode === "activity") await loadActivityMap();
+      if (currentPlotMode === "density") await loadDensityPlot();
+      setTimeout(handlePlotResize, 0);
+    }
+
+    // Fixed: paginated fetch so all users + all-time data are visible
+    async function loadActivityMap() {
+      if (!supabaseClient) return;
+      const { data, error } = await fetchAllCoffeesAllUsers();
+      if (error) {
+        console.error("activity map query:", error);
+        lastActivityRows = [];
+        el("activityPlotNote").textContent = "Kunde inte ladda Coffee Activity Map.";
+      } else {
+        lastActivityRows = data||[];
+        refreshActivityUserFocus(lastActivityRows);
+        el("activityPlotNote").textContent = lastActivityRows.length
+          ? `${lastActivityRows.length} kafferegistreringar visas.`
+          : "Inga kafferegistreringar ännu.";
+      }
+      drawActivityMap(lastActivityRows);
+      if (activityUserFocus) {
+        const n = filterActivityRowsByRange(lastActivityRows||[]).filter(r=>r.username===activityUserFocus).length;
+        const rangeLabel = activityRangeDays==="all" ? "All time" : `senaste ${activityRangeDays} dagarna`;
+        el("activityPlotNote").textContent = `${activityUserFocus}: ${n} kaffe markerade · ${rangeLabel}. Övriga användare är nedtonade.`;
+      }
+    }
+
+    // Fixed: paginated fetch so all users + all-time data are visible
+    async function loadDensityPlot() {
+      if (!supabaseClient) return;
+      const { data, error } = await fetchAllCoffeesAllUsers();
+      if (error) { el("densityPlotNote").textContent = "Kunde inte ladda Coffee Density Plot."; return; }
+      lastActivityRows = data||[];
+      refreshDensityUserFocus(lastActivityRows);
+      drawDensityPlot(lastActivityRows);
+    }
+
+    function drawDensityPlot(rows) {
+      const canvas = el("densityCanvas"); if (!canvas) return;
+      const ctx = canvas.getContext("2d"); if (!ctx) return;
+      const filtered = (rows||[]).filter(r => !densityUserFocus || r.username === densityUserFocus);
+      const hours = filtered.map(r => { const d = new Date(r.timestamp); return d.getHours()+d.getMinutes()/60+d.getSeconds()/3600; });
+      const w = canvas.clientWidth||800, h = canvas.clientHeight||360, dpr = window.devicePixelRatio||1;
+      canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+      const x0=42,x1=w-18,y0=h-38,y1=20,bw=.75,pts=[]; let max=0;
+      for (let i=0;i<=240;i++) { const x=24*i/240; let d=0; for (const hh of hours) { let q=Math.abs(x-hh); q=Math.min(q,24-q); d+=Math.exp(-.5*(q/bw)*(q/bw)); } d=hours.length?d/hours.length:0; max=Math.max(max,d); pts.push({x,d}); } max=Math.max(max,.0001);
+      ctx.font="12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+      for (let hh=0;hh<=24;hh+=3) { const x=x0+(hh/24)*(x1-x0); ctx.strokeStyle="rgba(0,0,0,.07)"; ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,y0); ctx.stroke(); ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillText(String(hh).padStart(2,'0'),x-7,y0+19); }
+      ctx.beginPath(); pts.forEach((p,i)=>{ const x=x0+p.x/24*(x1-x0),y=y0-p.d/max*(y0-y1); if(i===0)ctx.moveTo(x,y0); ctx.lineTo(x,y); }); ctx.lineTo(x1,y0); ctx.closePath(); ctx.fillStyle="rgba(102,126,234,.16)"; ctx.fill();
+      ctx.beginPath(); pts.forEach((p,i)=>{ const x=x0+p.x/24*(x1-x0),y=y0-p.d/max*(y0-y1); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.strokeStyle="rgba(102,126,234,.95)"; ctx.lineWidth=2.5; ctx.stroke();
+      if (hours.length) { const peak=pts.reduce((a,b)=>b.d>a.d?b:a); const ph=Math.floor(peak.x)%24,pm=Math.round((peak.x-ph)*60)%60; el("densityPlotNote").textContent=`${densityUserFocus||'Alla användare'}: ${hours.length} kaffe analyserade · Peak ≈ ${String(ph).padStart(2,'0')}:${String(pm).padStart(2,'0')} · KDE-bandbredd 0,75 h.`; }
+      else el("densityPlotNote").textContent="Inga kafferegistreringar för valt urval.";
+    }
+
+    function drawActivityMap(rows) {
+      const visibleRows = filterActivityRowsByRange(rows); rows = visibleRows;
+      const canvas = el("activityCanvas"); if (!canvas) return;
+      const ctx = canvas.getContext("2d"); if (!ctx) return;
+      const w = canvas.clientWidth||800, h = canvas.clientHeight||420, dpr = window.devicePixelRatio||1;
+      canvas.width=Math.floor(w*dpr); canvas.height=Math.floor(h*dpr); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+      const padL=78,padR=18,padT=18,padB=36, x0=padL,x1=w-padR,y0=h-padB,y1=padT;
+      ctx.font="11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctx.strokeStyle="rgba(0,0,0,.12)"; ctx.fillStyle="rgba(0,0,0,.65)";
+      for (let hr=0;hr<=24;hr+=3) { const x=x0+(hr/24)*(x1-x0); ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y0);ctx.stroke();ctx.fillText(String(hr).padStart(2,'0'),x-7,y0+18); }
+      if (!rows||!rows.length) { ctx.fillText("Ingen data ännu",x0+10,y1+25); return; }
+      const parsed = rows.map(r=>({username:r.username,d:new Date(r.timestamp)})).filter(r=>!isNaN(r.d));
+      const days = [...new Set(parsed.map(r=>`${r.d.getFullYear()}-${String(r.d.getMonth()+1).padStart(2,'0')}-${String(r.d.getDate()).padStart(2,'0')}`))].sort();
+      const dayIndex = new Map(days.map((d,i)=>[d,i]));
+      const rowH = Math.max(8,(y0-y1)/Math.max(1,days.length));
+      const showEvery = Math.max(1,Math.ceil(days.length/12));
+      days.forEach((day,i)=>{ const y=y1+(i+.5)*rowH; if(i%showEvery===0||i===days.length-1){ctx.fillStyle="rgba(0,0,0,.62)";ctx.fillText(day.slice(5),6,y+4);} });
+      for (const r of parsed) {
+        const key=`${r.d.getFullYear()}-${String(r.d.getMonth()+1).padStart(2,'0')}-${String(r.d.getDate()).padStart(2,'0')}`;
+        const hour=r.d.getHours()+r.d.getMinutes()/60+r.d.getSeconds()/3600;
+        const x=x0+(hour/24)*(x1-x0), y=y1+(dayIndex.get(key)+.5)*rowH;
+        const focused=activityUserFocus&&r.username===activityUserFocus;
+        ctx.fillStyle=activityUserFocus?(focused?"rgba(229,62,62,.95)":"rgba(160,174,192,.20)"):"rgba(102,126,234,.62)";
+        const radius=focused?Math.max(3.5,Math.min(5.5,rowH*.36)):Math.max(2,Math.min(4,rowH*.28));
+        ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
+      }
+      ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillText("Klockslag",x1-48,y0+32);
+      const rangeLabel = activityRangeDays==="all"?"All time":`senaste ${activityRangeDays} dagarna`;
+      if (el("activityPlotNote") && !activityUserFocus) el("activityPlotNote").textContent=`${visibleRows.length} kafferegistreringar visas · ${rangeLabel}.`;
+    }
+
+    async function showPlot() {
+      el("plotHalfLife").textContent = String(CAFFEINE_HALF_LIFE_HOURS);
+      el("plotCard")?.classList.remove("hidden");
+      setTimeout(() => handlePlotResize(), 0);
+      if (!supabaseClient||!currentUsername) { lastPlotTimestampsMs=[]; lastPlotNote="Not logged in."; drawCaffeinePlot(lastPlotTimestampsMs,lastPlotNote); return; }
+      const { data, error } = await supabaseClient.from("coffees_by_username").select("timestamp").eq("username",currentUsername).order("timestamp",{ascending:true});
+      if (error) { lastPlotTimestampsMs=[]; lastPlotNote="Could not load data."; drawCaffeinePlot(lastPlotTimestampsMs,lastPlotNote); return; }
+      lastPlotTimestampsMs = (data||[]).map(r=>new Date(r.timestamp).getTime());
+      lastPlotNote = lastPlotTimestampsMs.length ? "" : "No coffees logged yet.";
+      drawCaffeinePlot(lastPlotTimestampsMs, lastPlotNote);
+    }
+
+    function drawCaffeinePlot(coffeeTimestampsMs, noteText) {
+      const canvas = el("caffeineCanvas"); if (!canvas) return;
+      const ctx = canvas.getContext("2d"); if (!ctx) return;
+      const cssW=canvas.clientWidth||800, cssH=canvas.clientHeight||320, dpr=window.devicePixelRatio||1;
+      canvas.width=Math.floor(cssW*dpr); canvas.height=Math.floor(cssH*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+      const w=cssW, h=cssH, smallScreen=w<420;
+      const padL=smallScreen?34:42, padR=18, padT=16, padB=smallScreen?30:34;
+      const now=new Date(), day0=new Date(now.getFullYear(),now.getMonth(),now.getDate()), day0ms=day0.getTime();
+      const msPerHour=60*60*1000, halfLifeMs=CAFFEINE_HALF_LIFE_HOURS*msPerHour, ln2=Math.LN2;
+      const nowOffsetMs=Math.max(0,Math.min(24*msPerHour,Date.now()-day0ms));
+      const stepMs=10*60*1000, points=[];
+      for (let t=0;t<=nowOffsetMs;t+=stepMs) { const timeMs=day0ms+t; let c=0; for (const ts of coffeeTimestampsMs) { if(ts>timeMs)continue; c+=CAFFEINE_MG_PER_CUP*Math.exp(-ln2*((timeMs-ts)/halfLifeMs)); } points.push({h:t/msPerHour,mg:c}); }
+      const maxY=Math.max(10,...points.map(p=>p.mg));
+      const x0=padL,x1=w-padR,y0=h-padB,y1=padT;
+      const xOfH=hh=>x0+(hh/24)*(x1-x0), yOfMg=mg=>y0-(mg/maxY)*(y0-y1);
+      ctx.clearRect(0,0,w,h);
+      ctx.lineWidth=1; ctx.strokeStyle="rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.moveTo(x0,y1); ctx.lineTo(x0,y0); ctx.lineTo(x1,y0); ctx.stroke();
+      ctx.font=(smallScreen?"11px":"12px")+" -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      for (let hh=0;hh<=24;hh+=(smallScreen?6:3)) { const x=xOfH(hh); ctx.strokeStyle="rgba(0,0,0,0.08)"; ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y0);ctx.stroke(); ctx.fillStyle="rgba(0,0,0,0.6)";ctx.fillText(String(hh),x-4,y0+18); }
+      ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillText("Hours",x1-36,y0+18);
+      for (const f of [0,.25,.5,.75,1]) { const val=f*maxY,y=yOfMg(val); ctx.strokeStyle="rgba(0,0,0,0.08)";ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();ctx.fillStyle="rgba(0,0,0,0.6)";ctx.fillText(`${Math.round(val)} mg`,6,y+4); }
+      const THRESHOLD_MG=150;
+      if (THRESHOLD_MG<=maxY) { const yThr=yOfMg(THRESHOLD_MG); ctx.strokeStyle="rgba(245,101,101,0.85)";ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(x0,yThr);ctx.lineTo(x1,yThr);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(245,101,101,0.9)";ctx.fillText("150 mg threshold",x0+6,Math.max(y1+12,yThr-6)); }
+      ctx.strokeStyle="rgba(102,126,234,0.95)"; ctx.lineWidth=2; ctx.beginPath();
+      points.forEach((p,i)=>{ const x=xOfH(p.h),y=yOfMg(p.mg); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }); ctx.stroke();
+      const nowH=(Date.now()-day0ms)/msPerHour, xNow=xOfH(Math.max(0,Math.min(24,nowH)));
+      ctx.strokeStyle="rgba(0,0,0,0.25)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xNow,y1);ctx.lineTo(xNow,y0);ctx.stroke();ctx.fillStyle="rgba(0,0,0,0.6)";ctx.fillText("now",xNow-10,y1-6);
+      if (noteText) { ctx.fillStyle="rgba(0,0,0,0.65)";ctx.fillText(noteText,x0+8,y1+16); }
+    }
+
+    function handlePlotResize() {
+      const plot = el("plotCard"); if (!plot||plot.classList.contains("hidden")) return;
+      if (plotRedrawTimer) clearTimeout(plotRedrawTimer);
+      plotRedrawTimer = setTimeout(() => {
+        if (currentPlotMode==="activity") drawActivityMap(lastActivityRows||[]);
+        else if (currentPlotMode==="density") drawDensityPlot(lastActivityRows||[]);
+        else drawCaffeinePlot(lastPlotTimestampsMs||[],lastPlotNote||"");
+      }, 120);
+    }
+    window.addEventListener("resize", handlePlotResize);
+    window.addEventListener("orientationchange", handlePlotResize);
+
+    // ── Easter eggs: deterministic tap recognizer ─────────────────────────────────
+    // Beer Mode: exactly 5 quick taps.
+    // Larsson Mode: 3 quick taps -> short pause -> 3 quick taps within 3 seconds.
+    // The first triple is NOT committed immediately: we wait briefly to see if taps 4-5
+    // arrive. This prevents the 5-tap Beer gesture from accidentally arming Larsson Mode.
+
+    function applyLarssonMode(enabled, announce=true) {
+      if (enabled) {
+        localStorage.setItem(BEER_MODE_KEY,"0");
+        document.body.classList.remove("beer-mode");
+      }
+      localStorage.setItem(LARSSON_MODE_KEY,enabled?"1":"0");
+      document.body.classList.toggle("larsson-mode",!!enabled);
+
+      document.querySelectorAll(".app-title").forEach(x =>
+        x.textContent = enabled ? LARSSON_TITLE : (isBeerMode() ? BEER_TITLE : COFFEE_TITLE)
+      );
+      document.querySelectorAll(".app-logo").forEach(img => {
+        const use512=(img.getAttribute("src")||"").includes("512");
+        img.src=enabled
+          ? (use512?LARSSON_ICON_512:LARSSON_ICON_192)
+          : (isBeerMode()
+              ? (use512?BEER_ICON_512:BEER_ICON_192)
+              : (use512?COFFEE_ICON_512:COFFEE_ICON_192));
+      });
+
+      refreshModeUI();
+      if(currentUsername&&supabaseClient&&!el("app")?.classList.contains("hidden")) loadData();
+
+      if(enabled&&announce) {
+        alert("🎩 LARSSON MODE\n\n✦ THE SECRET GENTLEMEN'S SOCIETY ✦\n\nExtraordinary circumstances require extraordinary refreshments.");
+      }
+    }
+
+    function applyBeerMode(enabled) {
+      if (enabled) {
+        localStorage.setItem(LARSSON_MODE_KEY,"0");
+        document.body.classList.remove("larsson-mode");
+      }
+      document.querySelectorAll(".app-title").forEach(x=>x.textContent=enabled?BEER_TITLE:COFFEE_TITLE);
+      document.querySelectorAll(".app-logo").forEach(img=>{
+        const use512=(img.getAttribute("src")||"").toLowerCase().includes("512");
+        img.src=enabled?(use512?BEER_ICON_512:BEER_ICON_192):(use512?COFFEE_ICON_512:COFFEE_ICON_192);
+        img.style.cursor="pointer";
+      });
+      document.body.classList.toggle("beer-mode",!!enabled);
+      localStorage.setItem(BEER_MODE_KEY,enabled?"1":"0");
+      refreshModeUI();
+      try{if(!el("app")?.classList.contains("hidden")&&currentUsername&&supabaseClient)loadData();}catch(e){}
+      if(typeof handlePlotResize==="function")setTimeout(handlePlotResize,0);
+    }
+
+    let secretTapCount=0;
+    let secretBurstTimer=null;
+    let larssonStage=0;
+    let larssonStageTimer=null;
+
+    function clearSecretBurst(){
+      secretTapCount=0;
+      if(secretBurstTimer)clearTimeout(secretBurstTimer);
+      secretBurstTimer=null;
+    }
+
+    function resetSecretGesture(){
+      clearSecretBurst();
+      larssonStage=0;
+      if(larssonStageTimer)clearTimeout(larssonStageTimer);
+      larssonStageTimer=null;
+      document.querySelectorAll(".app-logo").forEach(x=>x.classList.remove("larsson-armed"));
+    }
+
+    function armLarsson(img){
+      larssonStage=1;
+      secretTapCount=0;
+      img.classList.remove("larsson-armed");
+      void img.offsetWidth;
+      img.classList.add("larsson-armed");
+      if(larssonStageTimer)clearTimeout(larssonStageTimer);
+      larssonStageTimer=setTimeout(resetSecretGesture,3000);
+    }
+
+    function finishLarsson(){
+      const enable=!isLarssonMode();
+      resetSecretGesture();
+      if(enable){
+        localStorage.setItem(BEER_MODE_KEY,"0");
+        document.body.classList.remove("beer-mode");
+      }
+      applyLarssonMode(enable,enable);
+    }
+
+    function registerSecretTap(img){
+      secretTapCount++;
+
+      if(secretBurstTimer)clearTimeout(secretBurstTimer);
+
+      // Five taps always wins immediately and exclusively: Beer Mode.
+      if(larssonStage===0 && secretTapCount===5){
+        const enable=!isBeerMode();
+        resetSecretGesture();
+        applyLarssonMode(false,false);
+        applyBeerMode(enable);
+        return;
+      }
+
+      // In Larsson stage 2, three quick taps complete the sequence.
+      if(larssonStage===1 && secretTapCount===3){
+        finishLarsson();
+        return;
+      }
+
+      // A burst is considered finished after 430 ms without another tap.
+      // Only THEN can exactly three taps arm Larsson Mode.
+      secretBurstTimer=setTimeout(()=>{
+        if(larssonStage===0 && secretTapCount===3){
+          clearSecretBurst();
+          armLarsson(img);
+        } else {
+          clearSecretBurst();
+        }
+      },430);
+    }
+
+    function bindBeerModeLogoHandlers(){
+      document.querySelectorAll(".app-logo").forEach(img=>{
+        img.addEventListener("click",e=>{
+          e.preventDefault();
+          registerSecretTap(img);
+        });
+      });
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────────
+    window.onload = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("admin")==="1") { showSetupAdmin(); return; }
+      bindBeerModeLogoHandlers();
+      resetToCoffeeMode();
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.error);
+      if (typeof window.supabase==="undefined") { setMsg("loginMsg","Supabase library failed to load (network / CDN blocked).",true); return; }
+      if (!SUPABASE_URL||SUPABASE_URL.includes("PASTE_YOUR")||!SUPABASE_ANON_KEY||SUPABASE_ANON_KEY.includes("PASTE_YOUR")) { setMsg("loginMsg","App not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in index.html.",true); return; }
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const savedUser = localStorage.getItem("coffee_username");
+      if (savedUser&&validUsername(savedUser)) { currentUsername=savedUser.trim(); showApp(); }
+      else show("login");
+    };
+  </script>
 </body>
 </html>
