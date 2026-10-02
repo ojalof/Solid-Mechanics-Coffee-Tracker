@@ -540,7 +540,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
   </div>
 
   <script>
-    /* BUILD: v60-unit-mode-beer-only */
+    /* BUILD: v61-mode-switch-race-fix */
 
     let supabaseClient = null;
 
@@ -580,6 +580,24 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     }
     function escapeHtml(v) {
       return String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    // Runs an async function one call at a time. If called while running, it
+    // remembers that and re-runs once afterwards, so the LAST render always
+    // reflects the current mode (prevents stale responses overwriting newer ones).
+    function serialize(fn) {
+      let running = false, again = false;
+      return async function () {
+        if (running) { again = true; return; }
+        running = true;
+        try {
+          do {
+            again = false;
+            if (!currentUsername) break;
+            await fn.apply(this, arguments);
+          } while (again);
+        } finally { running = false; }
+      };
     }
 
     function isBeerMode(){return localStorage.getItem(BEER_MODE_KEY)==="1";}
@@ -627,6 +645,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       refreshModeUI();
     }
 
+    let lastModeKey = null;
     function refreshModeUI(){
       const beer=isBeerMode(),larsson=isLarssonMode(),unit=isUnitMode();
       if(el("todayLabel"))el("todayLabel").textContent=unit?"Units today":larsson?"Guinness today":beer?"Beers today":"Coffees today";
@@ -646,6 +665,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       el("unitModeDescription")?.classList.toggle("hidden",!unit);
       const b=el("unitModeToggle");
       if(b){b.classList.toggle("hidden",!(beer||unit));b.textContent=unit?"☕ Coffee Mode":"💪 Unit Mode";}
+
+      // Don't show the previous mode's numbers under the new mode's label
+      const key=[beer,larsson,unit].join();
+      if(lastModeKey!==null&&key!==lastModeKey){
+        if(el("todayCount"))el("todayCount").textContent="…";
+        if(el("history"))el("history").innerHTML="";
+        if(el("leaderboard"))el("leaderboard").innerHTML="";
+      }
+      lastModeKey=key;
     }
 
     function hideAll() {
@@ -878,7 +906,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
       } else { inactive?.classList.remove("hidden"); myStatus?.classList.add("hidden"); }
       const others = rows.filter(r => r.username !== currentUsername);
       el("radarUsers").innerHTML = others.length
-        ? others.map(r => `<div class="radar-user"><span>🟢 ${r.username}</span><span class="radar-status">${radarTimeLabel(r.coffee_at)}</span></div>`).join("")
+        ? others.map(r => `<div class="radar-user"><span>🟢 ${escapeHtml(r.username)}</span><span class="radar-status">${radarTimeLabel(r.coffee_at)}</span></div>`).join("")
         : '<p class="muted" style="text-align:center;">📡 Scannar efter kaffesugna kollegor…</p>';
       setMsg("radarMsg","",false);
     }
@@ -891,32 +919,44 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
     }
 
     // ── Main data ────────────────────────────────────────────────────────────────
-    async function loadData() {
+    // Both loaders are serialized (see serialize()) so mode switches can't leave
+    // an old mode's response on screen.
+    const loadData = serialize(async function () {
+      const table = getActiveTable();
       const today = new Date(); today.setHours(0,0,0,0);
-      const { data, error } = await supabaseClient.from(getActiveTable()).select("id,timestamp")
+      const { data, error } = await supabaseClient.from(table).select("id,timestamp")
         .eq("username", currentUsername).gte("timestamp", today.toISOString()).order("timestamp", { ascending: false });
+      if (!currentUsername) return;
       if (error) { console.error("loadData:", error); setMsg("loginMsg","Database error. Did you run the SQL? (Open with ?admin=1 to view it.)",true); show("login"); return; }
+      // Mode changed while we were fetching: drop this result, the queued re-run will render the right one
+      if (table !== getActiveTable()) return;
       el("todayCount").textContent=isUnitMode()?`${(data||[]).length} U`:(data||[]).length;
       const rmBtn = el("removeCoffeeBtn");
       if (rmBtn) { const n = (data||[]).length; rmBtn.disabled = n < 1; rmBtn.style.opacity = n < 1 ? "0.5" : "1"; }
       el("history").innerHTML = (data||[]).slice(0,50).map(r => `<div class="history-item"><span>${getDrinkEmoji()}</span><span>${new Date(r.timestamp).toLocaleTimeString()}</span></div>`).join("")
         || `<p class="muted" style="text-align:center; margin-top:10px;">No ${getDrinkNamePlural()} yet today.</p>`;
       await loadLeaderboard();
-    }
+    });
 
     function switchLeaderboard(evt) {
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      evt.target.classList.add("active");
-      currentLeaderboardView = evt.target.getAttribute("data-view");
+      const tab = evt.target.closest(".tab");
+      if (!tab) return;
+      document.querySelectorAll("#leaderboardTabs .tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentLeaderboardView = tab.getAttribute("data-view");
       loadLeaderboard();
     }
 
-    async function loadLeaderboard() {
+    const loadLeaderboard = serialize(async function () {
+      const table = getActiveTable();
+      const stale = () => !currentUsername || table !== getActiveTable();
+
       if (currentLeaderboardView === "lagrekord") { await loadLagrekord(); return; }
 
       // Max/day: needs full dataset — use paginated fetch
       if (currentLeaderboardView === "maxday") {
         const { data, error } = await fetchAllActiveDrinksAllUsers();
+        if (stale()) return;
         if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load max/day leaderboard.</p>`; return; }
         const perUserDay = {};
         for (const r of (data||[])) {
@@ -933,7 +973,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         const rows = Object.entries(maxByUser).map(([username, obj]) => ({ username, coffees: obj.coffees, day: obj.day })).sort((a,b) => b.coffees-a.coffees||a.username.localeCompare(b.username));
         el("leaderboard").innerHTML = rows.slice(0,50).map((row,idx) => {
           const isMe = row.username === currentUsername;
-          return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${row.username} ${isMe?"(You)":""} <span class="muted" style="font-size:12px;${isMe?"color:rgba(255,255,255,0.85);":""}">(${row.day})</span></span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
+          return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${escapeHtml(row.username)} ${isMe?"(You)":""} <span class="muted" style="font-size:12px;${isMe?"color:rgba(255,255,255,0.85);":""}">(${row.day})</span></span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
         }).join("") || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
         return;
       }
@@ -952,9 +992,11 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         const { data, error } = await supabaseClient.rpc(fn, { ts: startDate.toISOString() });
         if (!error) rows = data;
       } catch (e) {}
+      if (stale()) return;
 
       if (!rows) {
-        const { data, error } = await supabaseClient.from(getActiveTable()).select("username").gte("timestamp", startDate.toISOString());
+        const { data, error } = await supabaseClient.from(table).select("username").gte("timestamp", startDate.toISOString());
+        if (stale()) return;
         if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Could not load leaderboard.</p>`; return; }
         const counts = {};
         (data||[]).forEach(r => counts[r.username] = (counts[r.username]||0)+1);
@@ -963,13 +1005,15 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
 
       el("leaderboard").innerHTML = (rows||[]).slice(0,50).map((row,idx) => {
         const isMe = row.username === currentUsername;
-        return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${row.username} ${isMe?"(You)":""}</span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
+        return `<div class="leaderboard-item ${isMe?"me":""}"><span>${idx+1}. ${escapeHtml(row.username)} ${isMe?"(You)":""}</span><span>${row.coffees} ${getDrinkEmoji()}</span></div>`;
       }).join("") || `<p class="muted" style="text-align:center;">No drinks recorded yet.</p>`;
-    }
+    });
 
     async function loadLagrekord() {
+      const table = getActiveTable();
       el("leaderboard").innerHTML = `<p class="muted" style="text-align:center; padding:16px 0;">Laddar rekord…</p>`;
-      const { data, error } = await supabaseClient.from(getActiveTable()).select("username,timestamp");
+      const { data, error } = await supabaseClient.from(table).select("username,timestamp");
+      if (!currentUsername || table !== getActiveTable()) return;
       if (error) { el("leaderboard").innerHTML = `<p class="muted" style="text-align:center;">Kunde inte ladda rekord.</p>`; return; }
       if (!data||!data.length) { el("leaderboard").innerHTML = `<p id="lagrekordEmpty">Inga öl registrerade än. Börja dricka! 🍺</p>`; return; }
       const byDay = {};
@@ -990,7 +1034,7 @@ grant execute on function public.leaderboard_username_since(timestamptz) to anon
         const medal = medals[idx] ?? `${idx+1}.`;
         const userRows = Object.entries(info.users).sort((a,b) => b[1]-a[1]).map(([uname,count]) => {
           const isMe = uname === currentUsername;
-          return `<div class="lagrekord-user-row${isMe?" is-me":""}"><span class="lagrekord-user-name">${isMe?"👤 ":""}${uname}${isMe?" (du)":""}</span><span class="lagrekord-user-beers">${count} 🍺</span></div>`;
+          return `<div class="lagrekord-user-row${isMe?" is-me":""}"><span class="lagrekord-user-name">${isMe?"👤 ":""}${escapeHtml(uname)}${isMe?" (du)":""}</span><span class="lagrekord-user-beers">${count} 🍺</span></div>`;
         }).join("");
         return `<div class="lagrekord-day"><div class="lagrekord-day-header"><span><span class="lagrekord-medal">${medal}</span>${capitalDay}<span class="day-date" style="margin-left:8px;">${dateStr}</span></span><span class="day-total">${info.total} 🍺</span></div>${userRows}</div>`;
       }).join("");
@@ -1114,7 +1158,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       setTimeout(handlePlotResize, 0);
     }
 
-    // Fixed: paginated fetch so all users + all-time data are visible
+    // Paginated fetch so all users + all-time data are visible
     async function loadActivityMap() {
       if (!supabaseClient) return;
       const { data, error } = await fetchAllCoffeesAllUsers();
@@ -1137,7 +1181,6 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       }
     }
 
-    // Fixed: paginated fetch so all users + all-time data are visible
     async function loadDensityPlot() {
       if (!supabaseClient) return;
       const { data, error } = await fetchAllCoffeesAllUsers();
@@ -1351,7 +1394,7 @@ Estimated caffeine remaining now (half-life ≈ ${CAFFEINE_HALF_LIFE_HOURS} h):
       if(larssonStage===0 && secretTapCount===5){
         const enable=!isBeerMode();
         resetSecretGesture();
-        applyLarssonMode(false,false);
+        if(isLarssonMode()) applyLarssonMode(false,false);
         applyBeerMode(enable);
         return;
       }
